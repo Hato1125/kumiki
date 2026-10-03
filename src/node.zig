@@ -88,6 +88,10 @@ pub fn isKey(comptime T: type) bool {
     return @hasDecl(T, "key_handler");
 }
 
+pub fn isWheel(comptime T: type) bool {
+    return @hasDecl(T, "wheel_handler");
+}
+
 pub fn isInput(comptime T: type) bool {
     return @hasDecl(T, "input_handler");
 }

@@ -91,6 +91,7 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
         pub const tap = mod.tap;
         pub const key = mod.key;
         pub const input = mod.input;
+        pub const wheel = mod.wheel;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };

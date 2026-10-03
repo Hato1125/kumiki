@@ -11,6 +11,7 @@ const isFocusable = node_zig.isFocusable;
 const isInput = node_zig.isInput;
 const isKey = node_zig.isKey;
 const isTap = node_zig.isTap;
+const isWheel = node_zig.isWheel;
 const task_zig = @import("task.zig");
 const markTargets = @import("tree.zig").markTargets;
 
@@ -63,10 +64,20 @@ pub const TextInput = struct {
     composing: bool = false,
 };
 
+// How far the wheel turned while the pointer was at `at`. As SDL3 reports
+// it, a positive `x` is to the right and a positive `y` is away from the
+// user.
+pub const Wheel = struct {
+    x: f32 = 0,
+    y: f32 = 0,
+    at: Point = .{},
+};
+
 pub const Event = union(enum) {
     pointer_move: Point,
     pointer_leave,
     button: MouseButtonEvent,
+    wheel: Wheel,
     key: KeyPress,
     text: TextInput,
     close,
@@ -171,7 +182,7 @@ pub fn typingArea(node: anytype, target: NodeId, area: *?types.Bounds) bool {
 }
 
 // What is offered to a node and then to its ancestors.
-pub const Offer = union(enum) { click, key: KeyPress, text: TextInput };
+pub const Offer = union(enum) { click, wheel: Wheel, key: KeyPress, text: TextInput };
 
 // Enter and Space activate a tap, except while text is typed: they belong to
 // the text then.
@@ -181,6 +192,12 @@ fn handle(node: anytype, offer: Offer, owners: anytype, state: *const State) boo
         if (offer == .text) {
             invoke(Widget.input_handler, owners, state, offer.text);
             markTargets(Widget.input_handler, owners);
+            return true;
+        }
+    }
+    if (comptime isWheel(Widget)) {
+        if (offer == .wheel and invoke(Widget.wheel_handler, owners, state, offer.wheel)) {
+            markTargets(Widget.wheel_handler, owners);
             return true;
         }
     }
@@ -195,7 +212,7 @@ fn handle(node: anytype, offer: Offer, owners: anytype, state: *const State) boo
             .click => true,
             .key => |press| state.typing == null and press.down and
                 (press.key == keys.enter or press.key == keys.space),
-            .text => false,
+            .wheel, .text => false,
         };
         if (activates) {
             _ = invoke(Widget.tap_action, owners, state, {});
@@ -206,8 +223,8 @@ fn handle(node: anytype, offer: Offer, owners: anytype, state: *const State) boo
     return false;
 }
 
-// Offers a click, a key press or text to `target` and then to its ancestors
-// until one handles it. Returns whether `target` is inside `node`.
+// Offers a click, a turn of the wheel, a key press or text to `target` and
+// then to its ancestors until one handles it. Returns whether `target` is inside `node`.
 pub fn bubble(
     node: anytype,
     target: NodeId,

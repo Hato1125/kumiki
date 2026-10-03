@@ -55,6 +55,7 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
         pub const tap = mod.tap;
         pub const key = mod.key;
         pub const input = mod.input;
+        pub const wheel = mod.wheel;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };
@@ -258,6 +259,18 @@ fn Key(comptime handler: anytype) type {
 // Offers key presses to `handler`, which returns whether it used the key.
 pub fn key(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Key(handler)) {
     return with(self, Key(handler){});
+}
+
+fn Wheeled(comptime handler: anytype) type {
+    return struct {
+        pub const wheel_handler = handler;
+    };
+}
+
+// Offers the turns of the wheel over the view to `handler`, in a ui.Wheel
+// parameter. `handler` returns whether it used the turn.
+pub fn wheel(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Wheeled(handler)) {
+    return with(self, Wheeled(handler){});
 }
 
 fn Input(comptime handler: anytype) type {

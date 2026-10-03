@@ -1142,3 +1142,51 @@ test "the advance of text counts the spaces at its end, and text without ink has
     try std.testing.expectApproxEqAbs(word.measure(.{}).width, word.advance(), 2);
     try std.testing.expectApproxEqAbs(word.advance() + 2 * 3, word.tracking(3).advance(), 0.01);
 }
+
+const Dial = struct {
+    turned: f32 = 0,
+
+    pub const view = ui.rect().frame(.{ .width = 40, .height = 40 }).wheel(turn);
+
+    fn turn(self: *Dial, wheel: ui.Wheel) bool {
+        if (wheel.y == 0) return false;
+        self.turned += wheel.y;
+        return true;
+    }
+};
+
+const Panes = struct {
+    slid: f32 = 0,
+
+    pub const view = ui.row(.{ Dial{}, ui.rect().frame(.{ .width = 40, .height = 40 }) }).wheel(slide);
+
+    fn slide(self: *Panes, wheel: ui.Wheel) bool {
+        self.slid += wheel.x + wheel.y;
+        return true;
+    }
+};
+
+test "the wheel reaches the view under the pointer, and the views around it when it is not used there" {
+    var s: Scene(Panes) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+
+    const dial = &s.root.children[0].children[0].children[0];
+    const over_dial = centerOf(dial);
+    s.impl.push(.{ .wheel = .{ .y = 3, .at = over_dial } });
+    try frame(&s);
+    try expectEqual(3, dial.widget.turned);
+    try expectEqual(0, s.root.widget.slid);
+    try expectEqual(dial.children[0].children[0].children[0].id, s.state.hover.id());
+
+    // The dial has no use for a turn sideways.
+    s.impl.push(.{ .wheel = .{ .x = 2, .at = over_dial } });
+    try frame(&s);
+    try expectEqual(3, dial.widget.turned);
+    try expectEqual(2, s.root.widget.slid);
+
+    s.impl.push(.{ .wheel = .{ .y = 5, .at = .{ .x = 60, .y = 20 } } });
+    try frame(&s);
+    try expectEqual(3, dial.widget.turned);
+    try expectEqual(7, s.root.widget.slid);
+}

@@ -87,6 +87,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .pointer_move => |at| s.hoverAt(at),
                     .pointer_leave => s.hoverAt(null),
                     .button => |button| s.pressButton(button),
+                    .wheel => |wheel| {
+                        s.hoverAt(wheel.at);
+                        if (s.state.hover.id() != 0) _ = s.offer(s.state.hover.id(), .{ .wheel = wheel });
+                    },
                     .key => |press| s.pressKey(press),
                     .text => |text| if (s.state.focus.id() != 0) {
                         _ = s.offer(s.state.focus.id(), .{ .text = text });

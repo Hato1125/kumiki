@@ -138,6 +138,11 @@ pub const Window = struct {
                 .x = event.button.x,
                 .y = event.button.y,
             } },
+            c.SDL_EVENT_MOUSE_WHEEL => .{ .wheel = .{
+                .x = event.wheel.x,
+                .y = event.wheel.y,
+                .at = .{ .x = event.wheel.mouse_x, .y = event.wheel.mouse_y },
+            } },
             c.SDL_EVENT_TEXT_INPUT => .{ .text = .{ .text = std.mem.span(event.text.text) } },
             c.SDL_EVENT_TEXT_EDITING => .{ .text = .{ .text = std.mem.span(event.edit.text), .composing = true } },
             c.SDL_EVENT_KEY_DOWN, c.SDL_EVENT_KEY_UP => .{ .key = .{
