@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .thorvg = .{
-            .url = "git+https://github.com/Hato1125/thorvg-zig.git#e9f08b142a3ca417b2da7e93bf8b3b5166022add",
-            .hash = "thorvg-1.1.2-BgugeV4QAABwfUwuOo2hvaJtOjBHeqRvtc9WWlEDcod0",
+            .url = "git+https://github.com/Hato1125/thorvg-zig.git#6f03e7ba6dd72eb97032788764e1578e56bf4e20",
+            .hash = "thorvg-1.1.2-Bgugee0RAAAnfopTjtaFiBUnIkxRtnjq-Nf15FJbxQIp",
         },
         .sdl = .{
             .url = "git+https://github.com/castholm/SDL.git?ref=v0.5.4+3.4.16#b72b3671502a70e109350ecac90afdc480dcfcc6",
