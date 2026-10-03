@@ -1,0 +1,158 @@
+const std = @import("std");
+
+const types = @import("types.zig");
+
+// Counts up from 1. 0 stands for no node.
+pub const NodeId = u32;
+
+// A node and its ancestors, the node itself first.
+pub const Path = struct {
+    ids: [128]NodeId = undefined,
+    len: usize = 0,
+
+    pub fn slice(path: *const Path) []const NodeId {
+        return path.ids[0..path.len];
+    }
+
+    pub fn id(path: *const Path) NodeId {
+        return if (path.len == 0) 0 else path.ids[0];
+    }
+
+    pub fn push(path: *Path, node: NodeId) void {
+        if (path.len == path.ids.len) return;
+        path.ids[path.len] = node;
+        path.len += 1;
+    }
+
+    // The part of the path from `node` up to the root.
+    pub fn from(path: *const Path, node: NodeId) Path {
+        var tail: Path = .{};
+        const start = std.mem.indexOfScalar(NodeId, path.slice(), node) orelse return tail;
+        for (path.ids[start..path.len]) |ancestor| tail.push(ancestor);
+        return tail;
+    }
+};
+
+pub fn contains(path: []const NodeId, id: NodeId) bool {
+    return std.mem.indexOfScalar(NodeId, path, id) != null;
+}
+
+// What a scene shares with every pass over its tree. `animating`, `built` and
+// `stale` tell what the last build did: an animation still runs, something
+// was built again, a path may have changed because a list matched its rows
+// again or a `when` switched. `keyboard` is whether the last input came from
+// the keyboard.
+pub const State = struct {
+    gpa: std.mem.Allocator,
+    next_id: NodeId = 0,
+    now: f64 = 0,
+    animating: bool = false,
+    built: bool = false,
+    stale: bool = false,
+    focus: Path = .{},
+    hover: Path = .{},
+    press: Path = .{},
+    keyboard: bool = false,
+};
+
+pub fn isShow(comptime T: type) bool {
+    return @hasDecl(T, "func");
+}
+
+pub fn isComponent(comptime T: type) bool {
+    return @hasDecl(T, "view");
+}
+
+pub fn isList(comptime T: type) bool {
+    return @hasDecl(T, "source");
+}
+
+// A container is made of `children` and a `config` that measures, places and
+// paints them.
+pub fn isContainer(comptime T: type) bool {
+    return @hasField(T, "children");
+}
+
+pub fn isTap(comptime T: type) bool {
+    return @hasDecl(T, "tap_action");
+}
+
+pub fn isKey(comptime T: type) bool {
+    return @hasDecl(T, "key_handler");
+}
+
+pub fn isFocusable(comptime T: type) bool {
+    return isTap(T) or isKey(T);
+}
+
+// Whether a widget takes part in a pass through its declaration `name`. A
+// component is walked as the container of its view, whatever it declares.
+pub fn has(comptime T: type, comptime name: []const u8) bool {
+    return !isComponent(T) and @hasDecl(T, name);
+}
+
+pub fn ReturnOf(comptime f: anytype) type {
+    return @typeInfo(@TypeOf(f)).@"fn".return_type.?;
+}
+
+pub fn Resolved(comptime View: type) type {
+    return if (isShow(View)) ReturnOf(View.func) else View;
+}
+
+// The widget of a container is its config, because its children have nodes
+// of their own. The arena holds the strings made by Context.print until the
+// next build.
+pub fn Node(comptime View: type) type {
+    return struct {
+        id: NodeId,
+        offset: types.Point,
+        size: types.Extent,
+        widget: if (isContainer(View) and !isComponent(View)) @FieldType(View, "config") else View,
+        children: Children(View),
+        dirty: if (isComponent(View)) bool else void,
+        arena: if (isComponent(View)) std.heap.ArenaAllocator.State else void,
+    };
+}
+
+pub fn NodeOf(comptime View: type) type {
+    return Node(Resolved(View));
+}
+
+fn Children(comptime View: type) type {
+    if (isComponent(View)) return struct { NodeOf(@TypeOf(View.view)) };
+    if (isList(View)) return std.ArrayList(Node(View.Row));
+    if (!isContainer(View)) return void;
+    const fields = @typeInfo(@FieldType(View, "children")).@"struct".fields;
+    var element_types: [fields.len]type = undefined;
+    for (fields, 0..) |field, i| element_types[i] = NodeOf(field.type);
+    return @Tuple(&element_types);
+}
+
+pub const Order = enum { all, shown, front };
+
+// Calls `f(child, args...)` for the children of `node` until a call returns
+// true. `shown` leaves out the side of a `when` that is not on display, and
+// `front` also starts from the child in front.
+pub fn each(node: anytype, comptime order: Order, comptime f: anytype, args: anytype) bool {
+    const children = &node.children;
+    if (comptime @TypeOf(children.*) == void) return false;
+    if (comptime @hasField(@TypeOf(children.*), "items")) {
+        for (0..children.items.len) |n| {
+            const i = if (order == .front) children.items.len - 1 - n else n;
+            if (stops(@call(.auto, f, .{&children.items[i]} ++ args))) return true;
+        }
+        return false;
+    }
+    const partly = comptime order != .all and has(@TypeOf(node.widget), "cond");
+    inline for (0..children.len) |n| {
+        const i = if (order == .front) children.len - 1 - n else n;
+        if (!partly or (i == 0) == node.widget.active) {
+            if (stops(@call(.auto, f, .{&children[i]} ++ args))) return true;
+        }
+    }
+    return false;
+}
+
+fn stops(result: anytype) bool {
+    return @TypeOf(result) == bool and result;
+}
