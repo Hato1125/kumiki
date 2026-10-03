@@ -43,6 +43,8 @@ pub const Corners = canvas.Corners;
 
 pub const Text = leaf.Text;
 pub const Rect = leaf.Rect;
+pub const Picture = leaf.Picture;
+pub const Image = canvas.Image;
 
 pub const show = show_zig.show;
 pub const wrap = mod.wrap;
@@ -53,6 +55,11 @@ pub fn text(content: []const u8) Text {
 
 pub fn rect() Rect {
     return .{};
+}
+
+// Shows `source`, or nothing while it is null.
+pub fn image(source: ?Image) Picture {
+    return .{ .source = source };
 }
 
 pub fn spacer() leaf.Spacer {

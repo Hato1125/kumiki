@@ -1190,3 +1190,26 @@ test "the wheel reaches the view under the pointer, and the views around it when
     try expectEqual(3, dial.widget.turned);
     try expectEqual(7, s.root.widget.slid);
 }
+
+test "an image is measured at its own size, smaller where space is short, and at the space offered with a fit" {
+    try ui.startup(null);
+    defer ui.shutdown();
+
+    const wide = try ui.Image.load("tests/wide.png");
+    defer wide.deinit();
+    const tall = try ui.Image.load("tests/tall.jpg");
+    defer tall.deinit();
+    try expectEqual(ui.Extent{ .width = 8, .height = 4 }, wide.size());
+    try expectEqual(ui.Extent{ .width = 6, .height = 10 }, tall.size());
+    try std.testing.expectError(error.ImageLoad, ui.Image.load("tests/missing.png"));
+
+    const picture = ui.image(wide);
+    const narrow: ui.Constraint = .{ .max = .{ .width = 4, .height = ui.inf } };
+    const box: ui.Constraint = .{ .max = .{ .width = 20, .height = 30 } };
+    try expectEqual(ui.Extent{ .width = 8, .height = 4 }, picture.measure(.{}));
+    try expectEqual(ui.Extent{ .width = 4, .height = 2 }, picture.measure(narrow));
+    try expectEqual(ui.Extent{ .width = 8, .height = 4 }, picture.measure(box));
+    try expectEqual(ui.Extent{ .width = 20, .height = 30 }, picture.fit(.cover).measure(box));
+    try expectEqual(ui.Extent{ .width = 4, .height = 4 }, picture.fit(.contain).measure(narrow));
+    try expectEqual(ui.Extent{}, ui.image(null).measure(box));
+}

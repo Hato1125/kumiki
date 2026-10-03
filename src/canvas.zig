@@ -139,6 +139,31 @@ pub fn textAdvance(s: []const u8, style: TextStyle) f32 {
     return total;
 }
 
+// A PNG or JPG file that is read once and drawn as often as needed. It lives
+// between `startup` and `shutdown`.
+pub const Image = struct {
+    picture: c.Tvg_Paint,
+
+    pub fn load(path: [:0]const u8) !Image {
+        const picture = c.tvg_picture_new();
+        _ = c.tvg_paint_ref(picture);
+        errdefer _ = c.tvg_paint_unref(picture, true);
+        if (c.tvg_picture_load(picture, path) != c.TVG_RESULT_SUCCESS) return error.ImageLoad;
+        return .{ .picture = picture };
+    }
+
+    pub fn deinit(image: Image) void {
+        _ = c.tvg_paint_unref(image.picture, true);
+    }
+
+    // In the pixels of the file.
+    pub fn size(image: Image) Extent {
+        var size_now: Extent = .{};
+        _ = c.tvg_picture_get_size(image.picture, &size_now.width, &size_now.height);
+        return size_now;
+    }
+};
+
 pub const Corners = struct {
     top_left: f32 = 0,
     top_right: f32 = 0,
@@ -302,6 +327,26 @@ pub const Canvas = struct {
         _ = c.tvg_paint_translate(paint, x * canvas.scale, (y + lead) * canvas.scale);
         _ = c.tvg_paint_scale(paint, canvas.scale);
         canvas.add(paint);
+    }
+
+    // Draws the whole image stretched over `r`. Every drawing is a duplicate,
+    // which shares the pixels of the image.
+    pub fn image(canvas: *Canvas, source: Image, r: Bounds) void {
+        const natural = source.size();
+        if (natural.width <= 0 or natural.height <= 0) return;
+        const picture = c.tvg_paint_duplicate(source.picture);
+        _ = c.tvg_paint_set_transform(picture, &.{
+            .e11 = r.w / natural.width * canvas.scale,
+            .e12 = 0,
+            .e13 = r.x * canvas.scale,
+            .e21 = 0,
+            .e22 = r.h / natural.height * canvas.scale,
+            .e23 = r.y * canvas.scale,
+            .e31 = 0,
+            .e32 = 0,
+            .e33 = 1,
+        });
+        canvas.add(picture);
     }
 
     // An empty outline in the units of the other drawing calls.
