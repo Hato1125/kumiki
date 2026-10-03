@@ -121,8 +121,19 @@ pub const FocusWalk = struct {
     }
 };
 
+// Whether a node wraps a focusable one through single children. It shares
+// the stop of that one then: the inner node takes the focus, and keys and
+// text reach the outer one from there.
+fn wrapsStop(comptime N: type) bool {
+    const Children = @FieldType(N, "children");
+    if (Children == void or @hasField(Children, "items")) return false;
+    const children = @typeInfo(Children).@"struct".fields;
+    if (children.len != 1) return false;
+    return isFocusable(@FieldType(children[0].type, "widget")) or wrapsStop(children[0].type);
+}
+
 pub fn walkFocus(node: anytype, walk: *FocusWalk) void {
-    if (comptime isFocusable(@TypeOf(node.widget))) walk.visit(node.id);
+    if (comptime isFocusable(@TypeOf(node.widget)) and !wrapsStop(@TypeOf(node.*))) walk.visit(node.id);
     _ = each(node, .shown, walkFocus, .{walk});
 }
 
