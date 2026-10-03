@@ -170,12 +170,13 @@ pub fn markChanged(node: anytype, before: []const node_zig.NodeId, after: []cons
 
 // A component received as a mutable pointer may have been changed, so it and
 // everything inside it are built again. The same goes for the component
-// holding a field received as a mutable pointer.
+// holding a field received as a mutable pointer. A pointer that no owner
+// fills in is the event, such as the result of a background function.
 pub fn markTargets(comptime f: anytype, owners: anytype) void {
     inline for (@typeInfo(@TypeOf(f)).@"fn".params) |param| {
         const P = param.type.?;
         if (comptime @typeInfo(P) == .pointer and !@typeInfo(P).pointer.is_const) {
-            markAll(owners[comptime call.source(@TypeOf(owners), P).owner]);
+            if (comptime call.find(@TypeOf(owners), P)) |from| markAll(owners[from.owner]);
         }
     }
 }

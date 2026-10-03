@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Tasks = @import("task.zig").Tasks;
 const types = @import("types.zig");
 
 // Counts up from 1. 0 stands for no node.
@@ -41,9 +42,11 @@ pub fn contains(path: []const NodeId, id: NodeId) bool {
 // `stale` tell what the last build did: an animation still runs, something
 // was built again, a path may have changed because a list matched its rows
 // again or a `when` switched. `keyboard` is whether the last input came from
-// the keyboard.
+// the keyboard. `tasks` lives on the heap, because functions in the
+// background point at it while the scene may still be moved.
 pub const State = struct {
     gpa: std.mem.Allocator,
+    tasks: *Tasks,
     next_id: NodeId = 0,
     now: f64 = 0,
     animating: bool = false,

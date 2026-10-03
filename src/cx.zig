@@ -34,6 +34,14 @@ pub fn pressed(cx: Context) bool {
     return contains(cx.state.press.slice(), cx.id);
 }
 
+// Runs `work(args...)` on a thread of its own, where it must not touch the
+// components. What it returns reaches `pub fn receive` of this component, or
+// of the nearest one around it with a parameter of that type, on the thread
+// of the scene. It is dropped when this component is gone by then.
+pub fn spawn(cx: Context, comptime work: anytype, args: std.meta.ArgsTuple(@TypeOf(work))) void {
+    cx.state.tasks.spawn(cx.id, work, args);
+}
+
 // The string stays valid until this component is built again. It is empty
 // when memory runs out.
 pub fn print(cx: Context, comptime fmt: []const u8, args: anytype) []const u8 {

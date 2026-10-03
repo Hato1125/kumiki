@@ -823,3 +823,210 @@ test "mount runs before the view is built and unmount after that of the componen
     s.deinit();
     try expectEqualStrings("MBmbuU", trace);
 }
+
+const Sum = struct { value: u32 };
+
+fn sum(a: u32, b: u32) Sum {
+    return .{ .value = a + b };
+}
+
+// Lets a test decide when a function in the background ends.
+var gate: std.atomic.Value(bool) = .init(false);
+
+fn sumLater(a: u32, b: u32) Sum {
+    while (!gate.load(.acquire)) std.atomic.spinLoopHint();
+    return sum(a, b);
+}
+
+// Advances frames until no function is left in the background.
+fn settle(s: anytype) !void {
+    for (0..10_000_000) |_| {
+        if (s.state.tasks.first == null) return;
+        try frame(s);
+        std.Thread.yield() catch {};
+    }
+    return error.StillRunning;
+}
+
+const Adder = struct {
+    total: u32 = 0,
+    waiting: bool = false,
+
+    pub const view = ui.show(label).padding(8).tap(start);
+
+    fn label(self: *const Adder, cx: ui.Context) ui.Text {
+        return ui.text(cx.print("{d}", .{self.total}));
+    }
+
+    fn start(self: *Adder, cx: ui.Context) void {
+        self.waiting = true;
+        cx.spawn(sum, .{ 20, 22 });
+    }
+
+    pub fn receive(self: *Adder, result: Sum) void {
+        self.waiting = false;
+        self.total = result.value;
+    }
+};
+
+test "a function spawned in the background hands its result to receive, which builds the component again" {
+    var s: Scene(Adder) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+
+    const label = &s.root.children[0].children[0].children[0];
+    try click(&s, centerOf(label));
+    try settle(&s);
+    try expect(!s.root.widget.waiting);
+    try expectEqual(42, s.root.widget.total);
+    try expectEqualStrings("42", label.widget.content);
+}
+
+const Eager = struct {
+    total: u32 = 0,
+
+    pub const view = ui.text("eager");
+
+    pub fn mount(cx: ui.Context) void {
+        cx.spawn(sum, .{ 2, 3 });
+    }
+
+    pub fn receive(self: *Eager, result: Sum) void {
+        self.total = result.value;
+    }
+};
+
+test "a function spawned in mount, before the scene is in its place, is received" {
+    var s: Scene(Eager) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try settle(&s);
+    try expectEqual(5, s.root.widget.total);
+}
+
+const Hand = struct {
+    pub const view = ui.text("work").padding(8).tap(start);
+
+    fn start(cx: ui.Context) void {
+        cx.spawn(sum, .{ 1, 2 });
+    }
+};
+
+const Foreman = struct {
+    total: u32 = 0,
+
+    pub const view = ui.row(.{Hand{}});
+
+    pub fn receive(self: *Foreman, result: Sum) void {
+        self.total = result.value;
+    }
+};
+
+test "a result goes to the nearest component around the spawning one that receives its type" {
+    var s: Scene(Foreman) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+
+    try click(&s, centerOf(&s.root.children[0].children[0]));
+    try settle(&s);
+    try expectEqual(3, s.root.widget.total);
+}
+
+var chores_done: u32 = 0;
+
+const Chore = struct {
+    pub const view = ui.text("chore").padding(4).tap(start);
+
+    fn start(cx: ui.Context) void {
+        cx.spawn(sumLater, .{ 3, 4 });
+    }
+
+    pub fn receive(_: *Chore, _: Sum) void {
+        chores_done += 1;
+    }
+};
+
+const Chores = struct {
+    count: usize = 1,
+
+    pub const view = ui.list(numbers, chore);
+
+    const all = [_]u32{ 1, 2 };
+
+    fn numbers(self: *const Chores) []const u32 {
+        return all[0..self.count];
+    }
+
+    fn chore(_: u32) Chore {
+        return .{};
+    }
+};
+
+test "the result for a component that is gone is dropped" {
+    gate.store(false, .release);
+    chores_done = 0;
+    var s: Scene(Chores) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+
+    try click(&s, centerOf(&s.root.children[0].children.items[0]));
+    try expect(s.state.tasks.first != null);
+    s.root.widget.count = 0;
+    s.root.dirty = true;
+    try frame(&s);
+    try expectEqual(0, s.root.children[0].children.items.len);
+
+    gate.store(true, .release);
+    try settle(&s);
+    try expectEqual(0, chores_done);
+}
+
+test "the scene waits for the functions that still run when it ends" {
+    gate.store(false, .release);
+    var s: Scene(Chores) = try .init(gpa, options, .{});
+    try frame(&s);
+    try click(&s, centerOf(&s.root.children[0].children.items[0]));
+    gate.store(true, .release);
+    s.deinit();
+}
+
+const Parting = struct {
+    pub const view = ui.text("parting");
+
+    pub fn unmount(cx: ui.Context) void {
+        cx.spawn(sum, .{ 1, 1 });
+    }
+};
+
+// std.testing.allocator fails this test when the function outlives the scene.
+test "the scene also waits for a function spawned in unmount" {
+    var s: Scene(Parting) = try .init(gpa, options, .{});
+    try frame(&s);
+    s.deinit();
+}
+
+var lent: Sum = .{ .value = 9 };
+
+fn lend() *Sum {
+    return &lent;
+}
+
+const Borrower = struct {
+    total: u32 = 0,
+
+    pub const view = ui.text("borrow");
+
+    pub fn mount(cx: ui.Context) void {
+        cx.spawn(lend, .{});
+    }
+
+    pub fn receive(self: *Borrower, result: *Sum) void {
+        self.total = result.value;
+    }
+};
+
+test "a function in the background may return a pointer" {
+    var s: Scene(Borrower) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try settle(&s);
+    try expectEqual(9, s.root.widget.total);
+}

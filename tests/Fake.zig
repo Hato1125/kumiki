@@ -54,3 +54,6 @@ pub fn begin(fake: *Fake) !?*ui.Canvas {
 }
 
 pub fn end(_: *Fake) !void {}
+
+// Nothing waits here: a test keeps advancing frames on its own.
+pub fn wake(_: *Fake) void {}

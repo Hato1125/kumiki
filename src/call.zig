@@ -28,7 +28,7 @@ fn WidgetOf(comptime Owner: type) type {
 // wins. When there is none, the value is the field of that type in the
 // nearest component that has one, which lets components share a value, such
 // as a theme, without knowing who holds it.
-pub fn source(comptime Owners: type, comptime P: type) Source {
+pub fn find(comptime Owners: type, comptime P: type) ?Source {
     const T = Pointee(P);
     const owners = @typeInfo(Owners).@"struct".fields;
     var i = owners.len;
@@ -51,7 +51,18 @@ pub fn source(comptime Owners: type, comptime P: type) Source {
         }
         if (found) |name| return .{ .owner = i, .field = name };
     }
-    @compileError("no enclosing component is or holds a " ++ @typeName(T) ++ " for this parameter");
+    return null;
+}
+
+pub fn source(comptime Owners: type, comptime P: type) Source {
+    return find(Owners, P) orelse
+        @compileError("no enclosing component is or holds a " ++ @typeName(Pointee(P)) ++ " for this parameter");
+}
+
+// Whether a parameter of type `P` is filled in from the owners. One that is
+// not stands for the event.
+pub fn fills(comptime Owners: type, comptime P: type) bool {
+    return P == Context or find(Owners, P) != null;
 }
 
 fn argument(comptime P: type, owners: anytype, state: *const State, event: anytype) P {

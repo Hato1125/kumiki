@@ -10,16 +10,19 @@ const node_zig = @import("node.zig");
 const NodeId = node_zig.NodeId;
 const Path = node_zig.Path;
 const paint = @import("paint.zig").paint;
+const Tasks = @import("task.zig").Tasks;
 const tree = @import("tree.zig");
 
 // A tree of views with its focus and pointer. `Impl` hands over the events
 // and receives the drawing: `next(wait)` returns the next event or null, and
 // with `wait` only once something has arrived; `size()` and `now()`, in
 // seconds, are read on every frame; `begin()` returns the canvas to draw to,
-// or null to skip the drawing, and `end()` shows it.
+// or null to skip the drawing, and `end()` shows it; `wake()` makes a
+// waiting `next`, or else the next one that waits, return, and is called
+// from other threads.
 pub fn Scene(comptime Impl: type, comptime Root: type) type {
     if (!node_zig.isComponent(Root)) @compileError("the root must be a component with a view");
-    inline for (.{ "Options", "init", "deinit", "next", "size", "now", "begin", "end" }) |name| {
+    inline for (.{ "Options", "init", "deinit", "next", "size", "now", "begin", "end", "wake" }) |name| {
         if (!@hasDecl(Impl, name)) @compileError(@typeName(Impl) ++ " is no implementation: it lacks " ++ name);
     }
 
@@ -37,14 +40,29 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // what the root allocates is freed by its `unmount`, not by the
         // caller.
         pub fn init(gpa: std.mem.Allocator, options: Impl.Options, root: Root) !Self {
-            var s: Self = .{ .impl = try Impl.init(gpa, options), .state = .{ .gpa = gpa }, .root = undefined };
+            const tasks = gpa.create(Tasks) catch @panic("out of memory");
+            errdefer gpa.destroy(tasks);
+            tasks.* = .{ .gpa = gpa, .wake = wake };
+            var s: Self = .{
+                .impl = try Impl.init(gpa, options),
+                .state = .{ .gpa = gpa, .tasks = tasks },
+                .root = undefined,
+            };
             tree.mount(&s.root, root, &s.state, .{});
             return s;
         }
 
+        // Waits for the functions that still run in the background. The
+        // tree goes first, because an `unmount` may spawn one more.
         pub fn deinit(s: *Self) void {
             tree.destroy(&s.root, &s.state, .{});
+            s.state.tasks.deinit();
             s.impl.deinit();
+            s.state.gpa.destroy(s.state.tasks);
+        }
+
+        fn wake(impl: *anyopaque) void {
+            Impl.wake(@ptrCast(@alignCast(impl)));
         }
 
         pub fn run(s: *Self) !void {
@@ -56,8 +74,12 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             return s.pending or s.state.animating;
         }
 
-        // Returns false once the implementation reports a close.
+        // Returns false once the implementation reports a close. The scene
+        // must stay where it is from its first frame on, because a function
+        // in the background wakes the implementation where the last frame
+        // found it.
         pub fn frame(s: *Self) !bool {
+            s.state.tasks.waker.store(&s.impl, .release);
             var wait = !s.busy();
             while (s.impl.next(wait)) |event| : (wait = false) {
                 switch (event) {
@@ -68,6 +90,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .close => return false,
                 }
             }
+            s.receive();
             s.update();
 
             if (try s.impl.begin()) |canvas| {
@@ -75,6 +98,18 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 try s.impl.end();
             }
             return true;
+        }
+
+        // Hands over what the background functions that have ended returned.
+        // A result is dropped when the component that spawned it is gone.
+        fn receive(s: *Self) void {
+            while (s.state.tasks.take()) |task| {
+                var handled = false;
+                const found = input.deliver(&s.root, task.tag, task, .{}, &s.state, &handled);
+                if (found and !handled) @panic("no component receives the result of a background function");
+                if (handled) s.pending = true;
+                task.destroy(task, s.state.gpa);
+            }
         }
 
         // A path that went stale is found again, and dropped when its node

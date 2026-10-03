@@ -1,6 +1,7 @@
 const types = @import("types.zig");
 const Point = types.Point;
-const invoke = @import("call.zig").invoke;
+const call = @import("call.zig");
+const invoke = call.invoke;
 const node_zig = @import("node.zig");
 const NodeId = node_zig.NodeId;
 const Path = node_zig.Path;
@@ -9,6 +10,7 @@ const each = node_zig.each;
 const isFocusable = node_zig.isFocusable;
 const isKey = node_zig.isKey;
 const isTap = node_zig.isTap;
+const task_zig = @import("task.zig");
 const markTargets = @import("tree.zig").markTargets;
 
 // The buttons, keys and modifier bits have the values of SDL3.
@@ -158,5 +160,36 @@ pub fn bubble(
     const inner = if (comptime node_zig.isComponent(@TypeOf(node.widget))) owners ++ .{node} else owners;
     if (node.id != target and !each(node, .shown, bubble, .{ target, press, inner, state, handled })) return false;
     if (!handled.*) handled.* = handle(node, press, owners, state);
+    return true;
+}
+
+// Hands the result of a background function to the `receive` of the
+// component `target`, or of the nearest one around it that takes the
+// result's type in the one parameter that its owners do not fill in. Returns
+// whether `target` is inside `node`.
+pub fn deliver(
+    node: anytype,
+    target: NodeId,
+    task: *const task_zig.Task,
+    owners: anytype,
+    state: *const State,
+    handled: *bool,
+) bool {
+    const Widget = @TypeOf(node.widget);
+    const component = comptime node_zig.isComponent(Widget);
+    const inner = if (component) owners ++ .{node} else owners;
+    if (node.id != target and !each(node, .all, deliver, .{ target, task, inner, state, handled })) return false;
+    if (comptime !component or !@hasDecl(Widget, "receive")) return true;
+
+    inline for (@typeInfo(@TypeOf(Widget.receive)).@"fn".params) |param| {
+        const P = param.type orelse continue;
+        if (comptime call.fills(@TypeOf(inner), P)) continue;
+        if (!handled.* and task.key == task_zig.keyOf(P)) {
+            const result: *const P = @ptrCast(@alignCast(task.result));
+            invoke(Widget.receive, inner, state, result.*);
+            markTargets(Widget.receive, inner);
+            handled.* = true;
+        }
+    }
     return true;
 }

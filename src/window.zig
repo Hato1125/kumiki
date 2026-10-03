@@ -70,6 +70,12 @@ pub const Window = struct {
         return null;
     }
 
+    pub fn wake(_: *Window) void {
+        var event = std.mem.zeroes(c.SDL_Event);
+        event.type = c.SDL_EVENT_USER;
+        _ = c.SDL_PushEvent(&event);
+    }
+
     pub fn size(w: *Window) Extent {
         var width: c_int = 0;
         var height: c_int = 0;
