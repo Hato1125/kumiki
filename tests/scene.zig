@@ -1213,3 +1213,53 @@ test "an image is measured at its own size, smaller where space is short, and at
     try expectEqual(ui.Extent{ .width = 4, .height = 4 }, picture.fit(.contain).measure(narrow));
     try expectEqual(ui.Extent{}, ui.image(null).measure(box));
 }
+
+const Scrap = struct {
+    text: std.ArrayList(u8) = .empty,
+    found: bool = false,
+
+    pub const view = ui.text("scrap").padding(4).key(shortcut);
+
+    // Nothing was copied yet when the scene is built.
+    pub fn mount(self: *Scrap, cx: ui.Context) void {
+        self.found = cx.paste() != null;
+    }
+
+    pub fn unmount(self: *Scrap, cx: ui.Context) void {
+        self.text.deinit(cx.gpa);
+    }
+
+    fn shortcut(self: *Scrap, key: ui.KeyPress, cx: ui.Context) bool {
+        if (!key.down or !key.ctrl()) return false;
+        switch (key.key) {
+            'c' => cx.copy(self.text.items),
+            'v' => self.text.appendSlice(cx.gpa, cx.paste() orelse return false) catch @panic("out of memory"),
+            else => return false,
+        }
+        return true;
+    }
+};
+
+test "a key handler copies to the clipboard of the implementation and pastes from it" {
+    var s: Scene(Scrap) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    try expect(!s.root.widget.found);
+
+    const ctrl = 0x0040;
+    try press(&s, ui.keys.tab, 0);
+    try press(&s, 'v', ctrl);
+    try expectEqualStrings("", s.root.widget.text.items);
+
+    s.impl.copy("ab");
+    try press(&s, 'v', ctrl);
+    try press(&s, 'v', ctrl);
+    try expectEqualStrings("abab", s.root.widget.text.items);
+
+    // Without Ctrl the key is not a shortcut.
+    try press(&s, 'v', 0);
+    try expectEqualStrings("abab", s.root.widget.text.items);
+
+    try press(&s, 'c', ctrl);
+    try expectEqualStrings("abab", s.impl.clipboard.items);
+}

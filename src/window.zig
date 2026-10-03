@@ -93,6 +93,21 @@ pub const Window = struct {
         _ = c.SDL_StartTextInput(w.window);
     }
 
+    pub fn paste(_: *Window, into: std.mem.Allocator) ?[]const u8 {
+        const text = c.SDL_GetClipboardText() orelse return null;
+        defer c.SDL_free(text);
+        const held = std.mem.span(text);
+        if (held.len == 0) return null;
+        return into.dupe(u8, held) catch @panic("out of memory");
+    }
+
+    // SDL takes a NUL-terminated string.
+    pub fn copy(_: *Window, text: []const u8) void {
+        const terminated = std.heap.c_allocator.dupeZ(u8, text) catch @panic("out of memory");
+        defer std.heap.c_allocator.free(terminated);
+        _ = c.SDL_SetClipboardText(terminated);
+    }
+
     pub fn size(w: *Window) Extent {
         var width: c_int = 0;
         var height: c_int = 0;

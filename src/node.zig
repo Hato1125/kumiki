@@ -49,6 +49,7 @@ pub fn contains(path: []const NodeId, id: NodeId) bool {
 pub const State = struct {
     gpa: std.mem.Allocator,
     tasks: *Tasks,
+    host: Host,
     inputs: u32 = 0,
     typing: ?types.Bounds = null,
     next_id: NodeId = 0,
@@ -60,6 +61,14 @@ pub const State = struct {
     hover: Path = .{},
     press: Path = .{},
     keyboard: bool = false,
+};
+
+// The implementation as a Context reaches it, for its clipboard. The scene
+// points `impl` at where the implementation is before it runs functions.
+pub const Host = struct {
+    impl: *anyopaque,
+    paste: *const fn (*anyopaque, std.mem.Allocator) ?[]const u8,
+    copy: *const fn (*anyopaque, []const u8) void,
 };
 
 pub fn isShow(comptime T: type) bool {

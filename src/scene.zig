@@ -20,10 +20,14 @@ const tree = @import("tree.zig");
 // or null to skip the drawing, and `end()` shows it; `wake()` makes a
 // waiting `next`, or else the next one that waits, return, and is called
 // from other threads; `input(area)` starts the typing of text at `area`, or
-// stops it when the area is null.
+// stops it when the area is null; `copy(text)` puts text into the clipboard
+// and `paste(allocator)` returns a copy of what it holds, or null.
 pub fn Scene(comptime Impl: type, comptime Root: type) type {
     if (!node_zig.isComponent(Root)) @compileError("the root must be a component with a view");
-    inline for (.{ "Options", "init", "deinit", "next", "size", "now", "begin", "end", "wake", "input" }) |name| {
+    inline for (.{
+        "Options", "init", "deinit", "next",  "size", "now",
+        "begin",   "end",  "wake",   "input", "copy", "paste",
+    }) |name| {
         if (!@hasDecl(Impl, name)) @compileError(@typeName(Impl) ++ " is no implementation: it lacks " ++ name);
     }
 
@@ -46,9 +50,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             tasks.* = .{ .gpa = gpa, .wake = wake };
             var s: Self = .{
                 .impl = try Impl.init(gpa, options),
-                .state = .{ .gpa = gpa, .tasks = tasks },
+                .state = .{ .gpa = gpa, .tasks = tasks, .host = .{ .impl = undefined, .paste = paste, .copy = copy } },
                 .root = undefined,
             };
+            s.state.host.impl = &s.impl;
             tree.mount(&s.root, root, &s.state, .{});
             return s;
         }
@@ -56,6 +61,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // Waits for the functions that still run in the background. The
         // tree goes first, because an `unmount` may spawn one more.
         pub fn deinit(s: *Self) void {
+            s.state.host.impl = &s.impl;
             tree.destroy(&s.root, &s.state, .{});
             s.state.tasks.deinit();
             s.impl.deinit();
@@ -64,6 +70,14 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
 
         fn wake(impl: *anyopaque) void {
             Impl.wake(@ptrCast(@alignCast(impl)));
+        }
+
+        fn paste(impl: *anyopaque, into: std.mem.Allocator) ?[]const u8 {
+            return Impl.paste(@ptrCast(@alignCast(impl)), into);
+        }
+
+        fn copy(impl: *anyopaque, text: []const u8) void {
+            Impl.copy(@ptrCast(@alignCast(impl)), text);
         }
 
         pub fn run(s: *Self) !void {
@@ -80,6 +94,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // in the background wakes the implementation where the last frame
         // found it.
         pub fn frame(s: *Self) !bool {
+            s.state.host.impl = &s.impl;
             s.state.tasks.waker.store(&s.impl, .release);
             var wait = !s.busy();
             while (s.impl.next(wait)) |event| : (wait = false) {

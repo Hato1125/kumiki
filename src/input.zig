@@ -35,6 +35,10 @@ pub const KeyPress = struct {
         return press.mod & 0x0003 != 0;
     }
 
+    pub fn ctrl(press: KeyPress) bool {
+        return press.mod & 0x00c0 != 0;
+    }
+
     // Whether the key is Ctrl, Shift, Alt or GUI on either side.
     pub fn isModifier(press: KeyPress) bool {
         return press.key >= 0x400000e0 and press.key <= 0x400000e7;

@@ -11,6 +11,7 @@ pub const Options = struct {
     size: ui.Extent = .{ .width = 400, .height = 300 },
 };
 
+gpa: std.mem.Allocator,
 queue: [16]ui.Event = undefined,
 first: usize = 0,
 count: usize = 0,
@@ -21,13 +22,16 @@ seconds: f64 = 0,
 canvas: ?*ui.Canvas = null,
 // Where the scene asked for typed text, or null while it asks for none.
 typing: ?ui.Bounds = null,
+// What was copied last. A test copies here itself to have it pasted.
+clipboard: std.ArrayList(u8) = .empty,
 
-pub fn init(_: std.mem.Allocator, options: Options) !Fake {
+pub fn init(gpa: std.mem.Allocator, options: Options) !Fake {
     try ui.startup(options.font);
-    return .{ .extent = options.size };
+    return .{ .gpa = gpa, .extent = options.size };
 }
 
-pub fn deinit(_: *Fake) void {
+pub fn deinit(fake: *Fake) void {
+    fake.clipboard.deinit(fake.gpa);
     ui.shutdown();
 }
 
@@ -62,4 +66,14 @@ pub fn wake(_: *Fake) void {}
 
 pub fn input(fake: *Fake, area: ?ui.Bounds) void {
     fake.typing = area;
+}
+
+pub fn paste(fake: *Fake, into: std.mem.Allocator) ?[]const u8 {
+    if (fake.clipboard.items.len == 0) return null;
+    return into.dupe(u8, fake.clipboard.items) catch @panic("out of memory");
+}
+
+pub fn copy(fake: *Fake, text: []const u8) void {
+    fake.clipboard.clearRetainingCapacity();
+    fake.clipboard.appendSlice(fake.gpa, text) catch @panic("out of memory");
 }

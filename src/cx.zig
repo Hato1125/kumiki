@@ -42,6 +42,18 @@ pub fn spawn(cx: Context, comptime work: anytype, args: std.meta.ArgsTuple(@Type
     cx.state.tasks.spawn(cx.id, work, args);
 }
 
+// The text in the clipboard, or null when it holds none. Like the strings of
+// `print`, it stays valid until this component is built again.
+pub fn paste(cx: Context) ?[]const u8 {
+    var arena = cx.arena.promote(cx.gpa);
+    defer cx.arena.* = arena.state;
+    return cx.state.host.paste(cx.state.host.impl, arena.allocator());
+}
+
+pub fn copy(cx: Context, text: []const u8) void {
+    cx.state.host.copy(cx.state.host.impl, text);
+}
+
 // The string stays valid until this component is built again. It is empty
 // when memory runs out.
 pub fn print(cx: Context, comptime fmt: []const u8, args: anytype) []const u8 {
