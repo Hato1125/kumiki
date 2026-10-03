@@ -117,6 +117,28 @@ pub fn measureText(s: []const u8, style: TextStyle, width: f32) Extent {
     return .{ .width = if (width > 0) @min(natural, width) else natural, .height = height };
 }
 
+// The distance from the start of `s` to where a character after it would go.
+// Unlike the width that measureText gives, it counts the spaces at the end.
+pub fn textAdvance(s: []const u8, style: TextStyle) f32 {
+    var plain = style;
+    plain.tracking = 0;
+    const text = newText("", plain, 0);
+    defer _ = c.tvg_paint_rel(text);
+
+    var total: f32 = 0;
+    var rest = s;
+    while (rest.len > 0) {
+        const len = @min(rest.len, std.unicode.utf8ByteSequenceLength(rest[0]) catch 1);
+        var char: [5]u8 = @splat(0);
+        @memcpy(char[0..len], rest[0..len]);
+        var metrics = std.mem.zeroes(c.Tvg_Glyph_Metrics);
+        _ = c.tvg_text_get_glyph_metrics(text, &char, &metrics, null);
+        total += metrics.advance + style.tracking;
+        rest = rest[len..];
+    }
+    return total;
+}
+
 pub const Corners = struct {
     top_left: f32 = 0,
     top_right: f32 = 0,

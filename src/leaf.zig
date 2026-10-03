@@ -46,6 +46,12 @@ pub const Text = struct {
         };
     }
 
+    // The width up to where the next character would go. It counts the
+    // spaces at the end, which `measure` leaves out, so a caret goes there.
+    pub fn advance(text: Text) f32 {
+        return canvas.textAdvance(text.content, text.style());
+    }
+
     // Wraps when the text is wider than the space offered.
     pub fn measure(text: Text, c: Constraint) Extent {
         const natural = canvas.measureText(text.content, text.style(), 0);

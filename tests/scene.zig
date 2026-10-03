@@ -1030,3 +1030,19 @@ test "a function in the background may return a pointer" {
     try settle(&s);
     try expectEqual(9, s.root.widget.total);
 }
+
+test "the advance of text counts the spaces at its end, and text without ink has no width" {
+    try ui.startup(options.font);
+    defer ui.shutdown();
+
+    const word = ui.text("ab");
+    try expectEqual(word.measure(.{}).width, ui.text("ab  ").measure(.{}).width);
+    try expectEqual(0, ui.text("  ").measure(.{}).width);
+    try expectEqual(0, ui.text("").advance());
+
+    const space = ui.text(" ").advance();
+    try expect(space > 0);
+    try std.testing.expectApproxEqAbs(word.advance() + 2 * space, ui.text("ab  ").advance(), 0.01);
+    try std.testing.expectApproxEqAbs(word.measure(.{}).width, word.advance(), 2);
+    try std.testing.expectApproxEqAbs(word.advance() + 2 * 3, word.tracking(3).advance(), 0.01);
+}
