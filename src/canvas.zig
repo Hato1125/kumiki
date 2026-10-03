@@ -57,14 +57,15 @@ fn terminated(s: []const u8) [*:0]const u8 {
     return @ptrCast(text_buffer.items.ptr);
 }
 
-// The distance from the left edge to the right end of the ink.
+// The distance from the left edge to the right end of the ink. ThorVG gives
+// no finite bounds for text without ink, such as spaces alone.
 fn inkWidth(text: c.Tvg_Paint) f32 {
     var x: f32 = 0;
     var y: f32 = 0;
     var w: f32 = 0;
     var h: f32 = 0;
     _ = c.tvg_paint_get_aabb(text, &x, &y, &w, &h);
-    return x + w;
+    return if (std.math.isFinite(x + w)) x + w else 0;
 }
 
 fn lineAdvance(text: c.Tvg_Paint) f32 {
