@@ -19,10 +19,11 @@ const tree = @import("tree.zig");
 // seconds, are read on every frame; `begin()` returns the canvas to draw to,
 // or null to skip the drawing, and `end()` shows it; `wake()` makes a
 // waiting `next`, or else the next one that waits, return, and is called
-// from other threads.
+// from other threads; `input(area)` starts the typing of text at `area`, or
+// stops it when the area is null.
 pub fn Scene(comptime Impl: type, comptime Root: type) type {
     if (!node_zig.isComponent(Root)) @compileError("the root must be a component with a view");
-    inline for (.{ "Options", "init", "deinit", "next", "size", "now", "begin", "end", "wake" }) |name| {
+    inline for (.{ "Options", "init", "deinit", "next", "size", "now", "begin", "end", "wake", "input" }) |name| {
         if (!@hasDecl(Impl, name)) @compileError(@typeName(Impl) ++ " is no implementation: it lacks " ++ name);
     }
 
@@ -87,6 +88,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .pointer_leave => s.hoverAt(null),
                     .button => |button| s.pressButton(button),
                     .key => |press| s.pressKey(press),
+                    .text => |text| if (s.state.focus.id() != 0) {
+                        _ = s.offer(s.state.focus.id(), .{ .text = text });
+                    },
                     .close => return false,
                 }
             }
@@ -128,12 +132,24 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             if (state.stale) {
                 inline for (.{ &state.focus, &state.hover, &state.press }) |path| s.move(path, s.pathTo(path.id()));
             }
-            if (!state.built and std.meta.eql(size, s.size)) return;
+            if (state.built or !std.meta.eql(size, s.size)) {
+                s.size = size;
+                _ = pass.measure(&s.root, .tight(size));
+                pass.layout(&s.root, .{});
+                if (s.pointer) |at| s.hoverAt(at);
+            }
+            if (state.inputs != 0 or state.typing != null) s.retype();
+        }
 
-            s.size = size;
-            _ = pass.measure(&s.root, .tight(size));
-            pass.layout(&s.root, .{});
-            if (s.pointer) |at| s.hoverAt(at);
+        // Asks the implementation for typed text where the focus is on an
+        // input or inside one, and no longer when it is not.
+        fn retype(s: *Self) void {
+            var area: ?types.Bounds = null;
+            const focus = s.state.focus.id();
+            if (focus != 0) _ = input.typingArea(&s.root, focus, &area);
+            if (std.meta.eql(area, s.state.typing)) return;
+            s.state.typing = area;
+            s.impl.input(area);
         }
 
         fn pathTo(s: *Self, id: NodeId) Path {
@@ -184,7 +200,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
 
             const target = state.press.id();
             s.move(&state.press, .{});
-            if (target != 0 and node_zig.contains(state.hover.slice(), target)) _ = s.offer(target, null);
+            if (target != 0 and node_zig.contains(state.hover.slice(), target)) _ = s.offer(target, .click);
         }
 
         // Keys go to the focus first. Tab and Escape move it when nothing
@@ -192,7 +208,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         fn pressKey(s: *Self, press: input.KeyPress) void {
             const state = &s.state;
             if (press.down and !press.isModifier()) s.setKeyboard(true);
-            if (state.focus.id() != 0 and s.offer(state.focus.id(), press)) return;
+            if (state.focus.id() != 0 and s.offer(state.focus.id(), .{ .key = press })) return;
             if (!press.down) return;
 
             if (press.key == keys.tab) {
@@ -204,9 +220,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             }
         }
 
-        fn offer(s: *Self, target: NodeId, press: ?input.KeyPress) bool {
+        fn offer(s: *Self, target: NodeId, what: input.Offer) bool {
             var handled = false;
-            _ = input.bubble(&s.root, target, press, .{}, &s.state, &handled);
+            _ = input.bubble(&s.root, target, what, .{}, &s.state, &handled);
             if (handled) s.pending = true;
             return handled;
         }

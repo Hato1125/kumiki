@@ -43,10 +43,14 @@ pub fn contains(path: []const NodeId, id: NodeId) bool {
 // was built again, a path may have changed because a list matched its rows
 // again or a `when` switched. `keyboard` is whether the last input came from
 // the keyboard. `tasks` lives on the heap, because functions in the
-// background point at it while the scene may still be moved.
+// background point at it while the scene may still be moved. `inputs` counts
+// the nodes that take typed text, and `typing` is where the implementation
+// was asked for it.
 pub const State = struct {
     gpa: std.mem.Allocator,
     tasks: *Tasks,
+    inputs: u32 = 0,
+    typing: ?types.Bounds = null,
     next_id: NodeId = 0,
     now: f64 = 0,
     animating: bool = false,
@@ -84,8 +88,12 @@ pub fn isKey(comptime T: type) bool {
     return @hasDecl(T, "key_handler");
 }
 
+pub fn isInput(comptime T: type) bool {
+    return @hasDecl(T, "input_handler");
+}
+
 pub fn isFocusable(comptime T: type) bool {
-    return isTap(T) or isKey(T);
+    return isTap(T) or isKey(T) or isInput(T);
 }
 
 // Whether a widget takes part in a pass through its declaration `name`. A

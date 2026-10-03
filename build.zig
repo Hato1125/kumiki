@@ -46,7 +46,7 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_tests.step);
     }
 
-    for ([_][]const u8{ "counter", "todo", "animation", "demo" }) |name| {
+    for ([_][]const u8{ "counter", "todo", "animation", "demo", "input" }) |name| {
         const exe = b.addExecutable(.{
             .name = name,
             .root_module = b.createModule(.{

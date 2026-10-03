@@ -1031,6 +1031,102 @@ test "a function in the background may return a pointer" {
     try expectEqual(9, s.root.widget.total);
 }
 
+const Entry = struct {
+    text: std.ArrayList(u8) = .empty,
+    composing: usize = 0,
+
+    pub const view = ui.show(label).padding(4).input(typed).key(edit);
+
+    pub fn unmount(self: *Entry, cx: ui.Context) void {
+        self.text.deinit(cx.gpa);
+    }
+
+    fn label(self: *const Entry, cx: ui.Context) ui.Text {
+        return ui.text(cx.print("{s}", .{self.text.items}));
+    }
+
+    fn typed(self: *Entry, input: ui.TextInput, cx: ui.Context) void {
+        self.composing = if (input.composing) input.text.len else 0;
+        if (input.composing) return;
+        self.text.appendSlice(cx.gpa, input.text) catch @panic("out of memory");
+    }
+
+    fn edit(self: *Entry, key: ui.KeyPress) bool {
+        if (!key.down or key.key != ui.keys.backspace or self.text.items.len == 0) return false;
+        _ = self.text.pop();
+        return true;
+    }
+};
+
+test "typed text reaches the focused input, which asks the implementation for it while it has the focus" {
+    var s: Scene(Entry) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    try expectEqual(null, s.impl.typing);
+
+    // The key handler around the input shares its stop.
+    const field = &s.root.children[0].children[0];
+    const label = &field.children[0].children[0];
+    try press(&s, ui.keys.tab, 0);
+    try expectEqual(field.id, s.state.focus.id());
+    try press(&s, ui.keys.tab, 0);
+    try expectEqual(field.id, s.state.focus.id());
+    try expectEqual(ui.Bounds{ .x = 0, .y = 0, .w = 400, .h = 300 }, s.impl.typing.?);
+
+    s.impl.push(.{ .text = .{ .text = "か", .composing = true } });
+    try frame(&s);
+    try expectEqual(3, s.root.widget.composing);
+    try expectEqualStrings("", label.widget.content);
+
+    s.impl.push(.{ .text = .{ .text = "ab" } });
+    try frame(&s);
+    try expectEqual(0, s.root.widget.composing);
+    try expectEqualStrings("ab", label.widget.content);
+
+    try press(&s, ui.keys.backspace, 0);
+    try expectEqualStrings("a", label.widget.content);
+
+    try press(&s, ui.keys.escape, 0);
+    try expectEqual(null, s.impl.typing);
+    s.impl.push(.{ .text = .{ .text = "c" } });
+    try frame(&s);
+    try expectEqualStrings("a", s.root.widget.text.items);
+}
+
+const Form = struct {
+    notes: u32 = 0,
+    sent: u32 = 0,
+
+    pub const view = ui.text("field").padding(4).input(jot).padding(4).tap(send);
+
+    fn jot(self: *Form, _: ui.TextInput) void {
+        self.notes += 1;
+    }
+
+    fn send(self: *Form) void {
+        self.sent += 1;
+    }
+};
+
+test "while text is typed, Enter and Space do not activate the tap around the input" {
+    var s: Scene(Form) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+
+    const field = &s.root.children[0].children[0].children[0];
+    try press(&s, ui.keys.tab, 0);
+    try expectEqual(field.id, s.state.focus.id());
+    try press(&s, ui.keys.space, 0);
+    try press(&s, ui.keys.enter, 0);
+    s.impl.push(.{ .text = .{ .text = " " } });
+    try frame(&s);
+    try expectEqual(0, s.root.widget.sent);
+    try expectEqual(1, s.root.widget.notes);
+
+    try click(&s, centerOf(field));
+    try expectEqual(1, s.root.widget.sent);
+}
+
 test "the advance of text counts the spaces at its end, and text without ink has no width" {
     try ui.startup(options.font);
     defer ui.shutdown();

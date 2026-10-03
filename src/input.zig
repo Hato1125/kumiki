@@ -8,6 +8,7 @@ const Path = node_zig.Path;
 const State = node_zig.State;
 const each = node_zig.each;
 const isFocusable = node_zig.isFocusable;
+const isInput = node_zig.isInput;
 const isKey = node_zig.isKey;
 const isTap = node_zig.isTap;
 const task_zig = @import("task.zig");
@@ -44,6 +45,22 @@ pub const keys = struct {
     pub const space: u32 = 0x20;
     pub const tab: u32 = 0x09;
     pub const escape: u32 = 0x1b;
+    pub const backspace: u32 = 0x08;
+    pub const delete: u32 = 0x7f;
+    pub const home: u32 = 0x4000004a;
+    pub const end: u32 = 0x4000004d;
+    pub const right: u32 = 0x4000004f;
+    pub const left: u32 = 0x40000050;
+    pub const down: u32 = 0x40000051;
+    pub const up: u32 = 0x40000052;
+};
+
+// Text that was typed, or that an input method is still composing: each
+// composition replaces the one before, and an empty one ends it. `text` is
+// UTF-8 and only valid while the function it is given to runs.
+pub const TextInput = struct {
+    text: []const u8,
+    composing: bool = false,
 };
 
 pub const Event = union(enum) {
@@ -51,6 +68,7 @@ pub const Event = union(enum) {
     pointer_leave,
     button: MouseButtonEvent,
     key: KeyPress,
+    text: TextInput,
     close,
 };
 
@@ -137,17 +155,48 @@ pub fn walkFocus(node: anytype, walk: *FocusWalk) void {
     _ = each(node, .shown, walkFocus, .{walk});
 }
 
-// A null `press` is a click.
-fn handle(node: anytype, press: ?KeyPress, owners: anytype, state: *const State) bool {
+// The bounds of the nearest node that takes typed text among `target` and
+// its ancestors.
+pub fn typingArea(node: anytype, target: NodeId, area: *?types.Bounds) bool {
+    if (node.id != target and !each(node, .shown, typingArea, .{ target, area })) return false;
+    if (comptime isInput(@TypeOf(node.widget))) {
+        if (area.* == null) area.* = .{
+            .x = node.offset.x,
+            .y = node.offset.y,
+            .w = node.size.width,
+            .h = node.size.height,
+        };
+    }
+    return true;
+}
+
+// What is offered to a node and then to its ancestors.
+pub const Offer = union(enum) { click, key: KeyPress, text: TextInput };
+
+// Enter and Space activate a tap, except while text is typed: they belong to
+// the text then.
+fn handle(node: anytype, offer: Offer, owners: anytype, state: *const State) bool {
     const Widget = @TypeOf(node.widget);
+    if (comptime isInput(Widget)) {
+        if (offer == .text) {
+            invoke(Widget.input_handler, owners, state, offer.text);
+            markTargets(Widget.input_handler, owners);
+            return true;
+        }
+    }
     if (comptime isKey(Widget)) {
-        if (press != null and invoke(Widget.key_handler, owners, state, press.?)) {
+        if (offer == .key and invoke(Widget.key_handler, owners, state, offer.key)) {
             markTargets(Widget.key_handler, owners);
             return true;
         }
     }
     if (comptime isTap(Widget)) {
-        const activates = if (press) |p| p.down and (p.key == keys.enter or p.key == keys.space) else true;
+        const activates = switch (offer) {
+            .click => true,
+            .key => |press| state.typing == null and press.down and
+                (press.key == keys.enter or press.key == keys.space),
+            .text => false,
+        };
         if (activates) {
             _ = invoke(Widget.tap_action, owners, state, {});
             markTargets(Widget.tap_action, owners);
@@ -157,20 +206,19 @@ fn handle(node: anytype, press: ?KeyPress, owners: anytype, state: *const State)
     return false;
 }
 
-// Offers a key press, or a click when `press` is null, to `target` and then
-// to its ancestors until one handles it. Returns whether `target` is inside
-// `node`.
+// Offers a click, a key press or text to `target` and then to its ancestors
+// until one handles it. Returns whether `target` is inside `node`.
 pub fn bubble(
     node: anytype,
     target: NodeId,
-    press: ?KeyPress,
+    offer: Offer,
     owners: anytype,
     state: *const State,
     handled: *bool,
 ) bool {
     const inner = if (comptime node_zig.isComponent(@TypeOf(node.widget))) owners ++ .{node} else owners;
-    if (node.id != target and !each(node, .shown, bubble, .{ target, press, inner, state, handled })) return false;
-    if (!handled.*) handled.* = handle(node, press, owners, state);
+    if (node.id != target and !each(node, .shown, bubble, .{ target, offer, inner, state, handled })) return false;
+    if (!handled.*) handled.* = handle(node, offer, owners, state);
     return true;
 }
 

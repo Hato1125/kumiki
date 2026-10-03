@@ -17,6 +17,7 @@ pub fn Show(comptime f: anytype) type {
         pub const opacity = mod.opacity;
         pub const tap = mod.tap;
         pub const key = mod.key;
+        pub const input = mod.input;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };

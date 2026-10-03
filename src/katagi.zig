@@ -18,6 +18,7 @@ pub const Scene = @import("scene.zig").Scene;
 pub const Event = input.Event;
 pub const MouseButtonEvent = input.MouseButtonEvent;
 pub const KeyPress = input.KeyPress;
+pub const TextInput = input.TextInput;
 pub const keys = input.keys;
 pub const startup = canvas.startup;
 pub const shutdown = canvas.shutdown;

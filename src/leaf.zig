@@ -73,6 +73,7 @@ pub const Text = struct {
     pub const opacity = mod.opacity;
     pub const tap = mod.tap;
     pub const key = mod.key;
+    pub const input = mod.input;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };
@@ -114,6 +115,7 @@ pub const Rect = struct {
     pub const opacity = mod.opacity;
     pub const tap = mod.tap;
     pub const key = mod.key;
+    pub const input = mod.input;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };

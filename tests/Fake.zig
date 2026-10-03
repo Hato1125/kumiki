@@ -19,6 +19,8 @@ seconds: f64 = 0,
 // Drawn to when set. A canvas needs OpenGL, so only views that leave it
 // alone can be painted here.
 canvas: ?*ui.Canvas = null,
+// Where the scene asked for typed text, or null while it asks for none.
+typing: ?ui.Bounds = null,
 
 pub fn init(_: std.mem.Allocator, options: Options) !Fake {
     try ui.startup(options.font);
@@ -57,3 +59,7 @@ pub fn end(_: *Fake) !void {}
 
 // Nothing waits here: a test keeps advancing frames on its own.
 pub fn wake(_: *Fake) void {}
+
+pub fn input(fake: *Fake, area: ?ui.Bounds) void {
+    fake.typing = area;
+}

@@ -3,7 +3,8 @@ const c = @import("c");
 
 const canvas_zig = @import("canvas.zig");
 const Canvas = canvas_zig.Canvas;
-const Extent = @import("types.zig").Extent;
+const types = @import("types.zig");
+const Extent = types.Extent;
 const Event = @import("input.zig").Event;
 const Scene = @import("scene.zig").Scene;
 
@@ -76,6 +77,22 @@ pub const Window = struct {
         _ = c.SDL_PushEvent(&event);
     }
 
+    // Shows the candidates of an input method near `area`.
+    pub fn input(w: *Window, area: ?types.Bounds) void {
+        const at = area orelse {
+            _ = c.SDL_StopTextInput(w.window);
+            return;
+        };
+        const rect: c.SDL_Rect = .{
+            .x = std.math.lossyCast(c_int, at.x),
+            .y = std.math.lossyCast(c_int, at.y),
+            .w = std.math.lossyCast(c_int, at.w),
+            .h = std.math.lossyCast(c_int, at.h),
+        };
+        _ = c.SDL_SetTextInputArea(w.window, &rect, 0);
+        _ = c.SDL_StartTextInput(w.window);
+    }
+
     pub fn size(w: *Window) Extent {
         var width: c_int = 0;
         var height: c_int = 0;
@@ -121,6 +138,8 @@ pub const Window = struct {
                 .x = event.button.x,
                 .y = event.button.y,
             } },
+            c.SDL_EVENT_TEXT_INPUT => .{ .text = .{ .text = std.mem.span(event.text.text) } },
+            c.SDL_EVENT_TEXT_EDITING => .{ .text = .{ .text = std.mem.span(event.edit.text), .composing = true } },
             c.SDL_EVENT_KEY_DOWN, c.SDL_EVENT_KEY_UP => .{ .key = .{
                 .key = event.key.key,
                 .mod = event.key.mod,

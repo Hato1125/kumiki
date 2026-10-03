@@ -54,6 +54,7 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
         pub const opacity = mod.opacity;
         pub const tap = mod.tap;
         pub const key = mod.key;
+        pub const input = mod.input;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };
@@ -257,6 +258,18 @@ fn Key(comptime handler: anytype) type {
 // Offers key presses to `handler`, which returns whether it used the key.
 pub fn key(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Key(handler)) {
     return with(self, Key(handler){});
+}
+
+fn Input(comptime handler: anytype) type {
+    return struct {
+        pub const input_handler = handler;
+    };
+}
+
+// Offers the text that is typed while the view, or something inside it, has
+// the focus to `handler`, in a ui.TextInput parameter.
+pub fn input(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Input(handler)) {
+    return with(self, Input(handler){});
 }
 
 fn Animated(comptime Child: type) type {

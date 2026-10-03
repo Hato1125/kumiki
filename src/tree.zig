@@ -56,6 +56,7 @@ pub fn mount(node: anytype, value: anytype, state: *State, owners: anytype) void
         mount(&node.children[0], target, state, owners);
     } else {
         node.widget = value.config;
+        if (comptime node_zig.isInput(@TypeOf(value.config))) state.inputs += 1;
         if (comptime @hasDecl(@TypeOf(value.config), "cond")) {
             node.widget.active = invoke(@TypeOf(value.config).cond, owners, state, {});
         }
@@ -67,6 +68,7 @@ pub fn destroy(node: anytype, state: *State, owners: anytype) void {
     const Widget = @TypeOf(node.widget);
     const inner = if (comptime isComponent(Widget)) owners ++ .{node} else owners;
     _ = each(node, .all, destroy, .{ state, inner });
+    if (comptime node_zig.isInput(Widget)) state.inputs -= 1;
     if (comptime isComponent(Widget)) {
         if (comptime @hasDecl(Widget, "unmount")) invoke(Widget.unmount, inner, state, {});
         node.arena.promote(state.gpa).deinit();
