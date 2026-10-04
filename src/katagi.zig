@@ -17,6 +17,7 @@ pub const Window = window.Window;
 pub const Scene = @import("scene.zig").Scene;
 pub const Event = input.Event;
 pub const MouseButtonEvent = input.MouseButtonEvent;
+pub const Pointer = input.Pointer;
 pub const Wheel = input.Wheel;
 pub const KeyPress = input.KeyPress;
 pub const TextInput = input.TextInput;

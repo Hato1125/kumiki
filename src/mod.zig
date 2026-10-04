@@ -56,6 +56,7 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
         pub const key = mod.key;
         pub const input = mod.input;
         pub const wheel = mod.wheel;
+        pub const pointer = mod.pointer;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };
@@ -71,7 +72,7 @@ pub fn set(view: anytype, comptime field: []const u8, value: @FieldType(@TypeOf(
 // Method calls may pass `self` by pointer.
 fn Base(comptime Self: type) type {
     return switch (@typeInfo(Self)) {
-        .pointer => |pointer| pointer.child,
+        .pointer => |info| info.child,
         else => Self,
     };
 }
@@ -271,6 +272,21 @@ fn Wheeled(comptime handler: anytype) type {
 // parameter. `handler` returns whether it used the turn.
 pub fn wheel(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Wheeled(handler)) {
     return with(self, Wheeled(handler){});
+}
+
+fn Held(comptime handler: anytype) type {
+    return struct {
+        pub const pointer_handler = handler;
+    };
+}
+
+// Offers what the left button does over the view to `handler`, in a
+// ui.Pointer parameter. When `handler` returns true for a press, the view
+// holds the pointer: the moves and the release reach it wherever the pointer
+// goes. While the pointer is held outside the view, the last move repeats on
+// every frame, so that the view can scroll after it.
+pub fn pointer(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Held(handler)) {
+    return with(self, Held(handler){});
 }
 
 fn Input(comptime handler: anytype) type {

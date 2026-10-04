@@ -159,6 +159,8 @@ pub const Window = struct {
                 .down = event.button.down,
                 .x = event.button.x,
                 .y = event.button.y,
+                .clicks = event.button.clicks,
+                .mod = c.SDL_GetModState(),
             } },
             c.SDL_EVENT_MOUSE_WHEEL => .{ .wheel = .{
                 .x = event.wheel.x,

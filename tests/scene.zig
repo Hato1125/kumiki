@@ -1285,6 +1285,82 @@ test "a key handler copies to the clipboard of the implementation and pastes fro
     try expectEqualStrings("abab", s.impl.clipboard.items);
 }
 
+const Knob = struct {
+    x: f32 = 0,
+    y: f32 = 0,
+    size: ui.Extent = .{},
+    taps: u32 = 0,
+
+    pub const view = ui.column(.{
+        ui.rect().frame(.{ .width = 100, .height = 20 }).pointer(grabbed).tap(tapped),
+        ui.rect().frame(.{ .width = 100, .height = 20 }).tap(tapped),
+    }).padding(20);
+
+    fn grabbed(self: *Knob, pointer: ui.Pointer, cx: ui.Context) bool {
+        note(switch (pointer.phase) {
+            .down => 'd',
+            .move => 'm',
+            .up => 'u',
+            .cancel => 'c',
+        });
+        self.x = pointer.x;
+        self.y = pointer.y;
+        self.size = cx.size;
+        return true;
+    }
+
+    fn tapped(self: *Knob) void {
+        self.taps += 1;
+    }
+};
+
+test "a view that uses a press holds the pointer until the release, and is told again while the pointer rests outside it" {
+    var s: Scene(Knob) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const knob = &s.root.widget;
+
+    // The position counts from the corner of the view, and the tap around
+    // the view is not pressed.
+    trace = "";
+    button(&s, true, .{ .x = 50, .y = 30 });
+    try frame(&s);
+    try expectEqualStrings("d", trace);
+    try expectEqual(30, knob.x);
+    try expectEqual(10, knob.y);
+    try expectEqual(s.root.size, knob.size);
+
+    s.impl.push(.{ .pointer_move = .{ .x = 500, .y = 30 } });
+    try frame(&s);
+    try expectEqualStrings("dmm", trace);
+    try expectEqual(480, knob.x);
+    try expect(s.busy());
+    try frame(&s);
+    try expectEqualStrings("dmmm", trace);
+
+    s.impl.push(.{ .pointer_move = .{ .x = 60, .y = 30 } });
+    try frame(&s);
+    try expectEqualStrings("dmmmm", trace);
+    try expect(!s.busy());
+
+    button(&s, false, .{ .x = 60, .y = 30 });
+    s.impl.push(.{ .pointer_move = .{ .x = 70, .y = 30 } });
+    try frame(&s);
+    try expectEqualStrings("dmmmmu", trace);
+    try expectEqual(0, knob.taps);
+
+    try click(&s, .{ .x = 50, .y = 50 });
+    try expectEqual(1, knob.taps);
+
+    // A window that loses the keyboard may never see the release.
+    trace = "";
+    button(&s, true, .{ .x = 50, .y = 30 });
+    s.impl.push(.{ .active = false });
+    s.impl.push(.{ .pointer_move = .{ .x = 60, .y = 30 } });
+    try frame(&s);
+    try expectEqualStrings("dc", trace);
+}
+
 fn Stepper(comptime on_step: anytype) type {
     return struct {
         pub const view = ui.text("+").tap(step);

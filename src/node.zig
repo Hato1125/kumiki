@@ -107,6 +107,10 @@ pub fn isInput(comptime T: type) bool {
     return @hasDecl(T, "input_handler");
 }
 
+pub fn isPointer(comptime T: type) bool {
+    return @hasDecl(T, "pointer_handler");
+}
+
 pub fn isFocusable(comptime T: type) bool {
     return isTap(T) or isKey(T) or isInput(T);
 }

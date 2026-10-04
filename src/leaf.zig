@@ -81,6 +81,7 @@ pub const Text = struct {
     pub const key = mod.key;
     pub const input = mod.input;
     pub const wheel = mod.wheel;
+    pub const pointer = mod.pointer;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };
@@ -124,6 +125,7 @@ pub const Rect = struct {
     pub const key = mod.key;
     pub const input = mod.input;
     pub const wheel = mod.wheel;
+    pub const pointer = mod.pointer;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };
@@ -189,6 +191,7 @@ pub const Picture = struct {
     pub const key = mod.key;
     pub const input = mod.input;
     pub const wheel = mod.wheel;
+    pub const pointer = mod.pointer;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };

@@ -12,6 +12,7 @@ const each = node_zig.each;
 const isFocusable = node_zig.isFocusable;
 const isInput = node_zig.isInput;
 const isKey = node_zig.isKey;
+const isPointer = node_zig.isPointer;
 const isTap = node_zig.isTap;
 const isWheel = node_zig.isWheel;
 const task_zig = @import("task.zig");
@@ -20,17 +21,36 @@ const markTargets = @import("tree.zig").markTargets;
 // The buttons, keys and modifier bits have the values of SDL3.
 pub const MouseButton = enum(u8) { left = 1, middle, right, x1, x2, _ };
 
+// `clicks` counts the presses that follow each other quickly at one place:
+// 2 for a double click. `mod` holds the modifier keys held meanwhile.
 pub const MouseButtonEvent = struct {
     button: MouseButton,
     down: bool,
     x: f32 = 0,
     y: f32 = 0,
+    clicks: u8 = 1,
+    mod: u16 = 0,
 };
 
 const shift_bits = 0x0003;
 const ctrl_bits = 0x00c0;
 const alt_bits = 0x0300;
 const gui_bits = 0x0c00;
+
+// What the left button does over a view with a `pointer` modifier. `x` and
+// `y` count from the top left corner of that view. A hold ends with `up`, or
+// with `cancel` when the window loses the keyboard meanwhile.
+pub const Pointer = struct {
+    phase: enum { down, move, up, cancel },
+    x: f32 = 0,
+    y: f32 = 0,
+    clicks: u8 = 1,
+    mod: u16 = 0,
+
+    pub fn shift(pointer: Pointer) bool {
+        return pointer.mod & shift_bits != 0;
+    }
+};
 
 pub const KeyPress = struct {
     key: u32 = 0,
@@ -206,12 +226,23 @@ pub fn typingArea(node: anytype, target: NodeId, area: *?types.Bounds) bool {
 }
 
 // What is offered to a node and then to its ancestors.
-pub const Offer = union(enum) { click, wheel: Wheel, key: KeyPress, text: TextInput };
+pub const Offer = union(enum) { click, wheel: Wheel, key: KeyPress, text: TextInput, pointer: Pointer };
 
 // Enter and Space activate a tap, except while text is typed: they belong to
 // the text then.
 fn handle(node: anytype, offer: Offer, owners: anytype, state: *const State) bool {
     const Widget = @TypeOf(node.widget);
+    if (comptime isPointer(Widget)) {
+        if (offer == .pointer) {
+            var local = offer.pointer;
+            local.x -= node.offset.x;
+            local.y -= node.offset.y;
+            if (invoke(Widget.pointer_handler, owners, state, local)) {
+                markTargets(Widget.pointer_handler, owners);
+                return true;
+            }
+        }
+    }
     if (comptime isInput(Widget)) {
         if (offer == .text) {
             invoke(Widget.input_handler, owners, state, offer.text);
@@ -236,7 +267,7 @@ fn handle(node: anytype, offer: Offer, owners: anytype, state: *const State) boo
             .click => true,
             .key => |press| state.typing == null and press.down and
                 (press.key == keys.enter or press.key == keys.space),
-            .wheel, .text => false,
+            .wheel, .text, .pointer => false,
         };
         if (activates) {
             _ = invoke(Widget.tap_action, owners, state, {});
@@ -247,19 +278,19 @@ fn handle(node: anytype, offer: Offer, owners: anytype, state: *const State) boo
     return false;
 }
 
-// Offers a click, a turn of the wheel, a key press or text to `target` and
-// then to its ancestors until one handles it. Returns whether `target` is inside `node`.
+// Offers `offer` to `target` and then to its ancestors until one handles
+// it, which `by` then names. Returns whether `target` is inside `node`.
 pub fn bubble(
     node: anytype,
     target: NodeId,
     offer: Offer,
     owners: anytype,
     state: *const State,
-    handled: *bool,
+    by: *NodeId,
 ) bool {
     const inner = if (comptime node_zig.isComponent(@TypeOf(node.widget))) owners ++ .{node} else owners;
-    if (node.id != target and !each(node, .shown, bubble, .{ target, offer, inner, state, handled })) return false;
-    if (!handled.*) handled.* = handle(node, offer, owners, state);
+    if (node.id != target and !each(node, .shown, bubble, .{ target, offer, inner, state, by })) return false;
+    if (by.* == 0 and handle(node, offer, owners, state)) by.* = node.id;
     return true;
 }
 

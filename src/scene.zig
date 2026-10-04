@@ -40,6 +40,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         size: Extent = .{},
         pointer: ?Point = null,
         pending: bool = true,
+        // The node that holds the pointer, and where the pointer was seen
+        // last, which is kept while it is outside the window.
+        held: NodeId = 0,
+        last: Point = .{},
         // When the last drawing asked for the next one.
         again: f64 = std.math.inf(f64),
 
@@ -90,7 +94,12 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
 
         // Whether the next frame is needed without waiting for input.
         pub fn busy(s: *const Self) bool {
-            return s.pending or s.state.animating;
+            return s.pending or s.state.animating or s.strays();
+        }
+
+        // Whether a view holds the pointer outside its bounds.
+        fn strays(s: *const Self) bool {
+            return s.held != 0 and !node_zig.contains(s.state.hover.slice(), s.held);
         }
 
         // Returns false once the implementation reports a close. The scene
@@ -104,7 +113,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             while (s.impl.next(wait)) |event| : (wait = 0) {
                 s.state.now = s.impl.now();
                 switch (event) {
-                    .pointer_move => |at| s.hoverAt(at),
+                    .pointer_move => |at| {
+                        s.hoverAt(at);
+                        s.hold(.move);
+                    },
                     .pointer_leave => s.hoverAt(null),
                     .button => |button| s.pressButton(button),
                     .wheel => |wheel| {
@@ -120,6 +132,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 }
             }
             s.state.now = s.impl.now();
+            if (s.strays()) s.hold(.move);
             s.receive();
             s.update();
 
@@ -160,6 +173,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
 
             if (state.stale) {
                 inline for (.{ &state.focus, &state.hover, &state.press }) |path| s.move(path, s.pathTo(path.id()));
+                if (s.pathTo(s.held).id() == 0) s.held = 0;
             }
             if (state.built or !std.meta.eql(size, s.size)) {
                 s.size = size;
@@ -207,22 +221,37 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         fn hoverAt(s: *Self, at: ?Point) void {
             s.pointer = at;
             var path: Path = .{};
-            if (at) |point| _ = input.hit(&s.root, point, &path);
+            if (at) |point| {
+                s.last = point;
+                _ = input.hit(&s.root, point, &path);
+            }
             s.move(&s.state.hover, path);
         }
 
+        // Tells the view that holds the pointer what the pointer does.
+        fn hold(s: *Self, phase: @FieldType(input.Pointer, "phase")) void {
+            if (s.held == 0) return;
+            _ = s.offer(s.held, .{ .pointer = .{ .phase = phase, .x = s.last.x, .y = s.last.y } });
+        }
+
         // Without the keyboard nothing has the focus, so what shows the
-        // focus is built again, and a tap that is pressed is let go.
+        // focus is built again. A pointer that is held is let go, because
+        // its release may never arrive.
         fn activate(s: *Self, active: bool) void {
             if (active == s.state.active) return;
             s.state.active = active;
             tree.markChanged(&s.root, s.state.focus.slice(), &.{});
             s.pending = true;
-            if (!active) s.move(&s.state.press, .{});
+            if (active) return;
+            s.hold(.cancel);
+            s.held = 0;
+            s.move(&s.state.press, .{});
         }
 
-        // A tap fires when the left button goes up over the tap it went down
-        // on. Pressing moves the focus to the nearest focusable node.
+        // Pressing moves the focus to the nearest focusable node. The press
+        // is offered to the views that take the pointer, and one that uses
+        // it holds the pointer until the release. Otherwise a tap fires when
+        // the left button goes up over the tap it went down on.
         fn pressButton(s: *Self, button: input.MouseButtonEvent) void {
             const state = &s.state;
             s.hoverAt(.{ .x = button.x, .y = button.y });
@@ -232,11 +261,23 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 s.setKeyboard(false);
                 var found: input.Nearest = .{};
                 _ = input.nearest(&s.root, state.hover.id(), &found);
-                s.move(&state.press, state.hover.from(found.tap));
                 if (found.focusable != 0) s.move(&state.focus, state.hover.from(found.focusable));
+                s.held = if (state.hover.id() == 0) 0 else s.offer(state.hover.id(), .{ .pointer = .{
+                    .phase = .down,
+                    .x = button.x,
+                    .y = button.y,
+                    .clicks = button.clicks,
+                    .mod = button.mod,
+                } });
+                if (s.held == 0) s.move(&state.press, state.hover.from(found.tap));
                 return;
             }
 
+            if (s.held != 0) {
+                s.hold(.up);
+                s.held = 0;
+                return;
+            }
             const target = state.press.id();
             s.move(&state.press, .{});
             if (target != 0 and node_zig.contains(state.hover.slice(), target)) _ = s.offer(target, .click);
@@ -247,7 +288,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         fn pressKey(s: *Self, press: input.KeyPress) void {
             const state = &s.state;
             if (press.down and !press.isModifier()) s.setKeyboard(true);
-            if (state.focus.id() != 0 and s.offer(state.focus.id(), .{ .key = press })) return;
+            if (state.focus.id() != 0 and s.offer(state.focus.id(), .{ .key = press }) != 0) return;
             if (!press.down) return;
 
             if (press.key == keys.tab) {
@@ -259,11 +300,12 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             }
         }
 
-        fn offer(s: *Self, target: NodeId, what: input.Offer) bool {
-            var handled = false;
-            _ = input.bubble(&s.root, target, what, .{}, &s.state, &handled);
-            if (handled) s.pending = true;
-            return handled;
+        // Returns the node that handled it, or 0.
+        fn offer(s: *Self, target: NodeId, what: input.Offer) NodeId {
+            var by: NodeId = 0;
+            _ = input.bubble(&s.root, target, what, .{}, &s.state, &by);
+            if (by != 0) s.pending = true;
+            return by;
         }
     };
 }
