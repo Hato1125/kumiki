@@ -471,6 +471,75 @@ test "layout" {
     try expectEqual(padded.offset.y + 2, padded.children[0].offset.y);
 }
 
+const Tone = struct { level: u8 };
+
+var tone_builds: u32 = 0;
+
+const ToneLabel = struct {
+    pub const view = ui.show(label);
+
+    fn label(tone: Tone, cx: ui.Context) ui.Text {
+        tone_builds += 1;
+        return ui.text(cx.print("{d}", .{tone.level}));
+    }
+};
+
+// Provides one more while the pointer is over it, when it reacts at all.
+fn Toned(comptime reacts: bool) type {
+    return struct {
+        base: u8,
+
+        const Self = @This();
+
+        pub const view = ui.row(.{ ui.show(own).padding(8), ToneLabel{} });
+
+        pub fn provide(self: *const Self, cx: ui.Context) Tone {
+            return .{ .level = self.base + @intFromBool(reacts and cx.hovered()) };
+        }
+
+        fn own(tone: *const Tone, cx: ui.Context) ui.Text {
+            return ui.text(cx.print("own {d}", .{tone.level}));
+        }
+    };
+}
+
+const Tones = struct {
+    // The nearest component that holds or provides the type wins, so this
+    // one reaches neither label.
+    tone: Tone = .{ .level = 9 },
+
+    pub const view = ui.column(.{ Toned(true){ .base = 1 }, Toned(false){ .base = 5 } });
+};
+
+test "a component provides a value to the functions inside it, and what is inside is built again only when the value changes" {
+    var s: Scene(Tones) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    tone_builds = 0;
+
+    const first = &s.root.children[0].children[0];
+    const second = &s.root.children[0].children[1];
+    const own = &first.children[0].children[0];
+    const label = &first.children[0].children[1].children[0];
+    try expectEqualStrings("own 1", own.children[0].widget.content);
+    try expectEqualStrings("1", label.widget.content);
+    try expectEqualStrings("5", second.children[0].children[1].children[0].widget.content);
+
+    // The pointer is over the first component, but not over the label in it.
+    s.impl.push(.{ .pointer_move = centerOf(own) });
+    try frame(&s);
+    try expectEqualStrings("own 2", own.children[0].widget.content);
+    try expectEqualStrings("2", label.widget.content);
+    try expectEqual(1, tone_builds);
+
+    // The second one is built again and provides what it did before.
+    s.impl.push(.{ .pointer_move = centerOf(&second.children[0].children[0]) });
+    try frame(&s);
+    try expectEqualStrings("1", label.widget.content);
+    try expectEqual(2, tone_builds);
+    try expect(!s.busy());
+}
+
 // Overwrites memory before it is freed, so that a test notices a string that
 // is read after its arena is gone.
 const poisoning: std.mem.Allocator = .{ .ptr = &trace_buf, .vtable = &.{

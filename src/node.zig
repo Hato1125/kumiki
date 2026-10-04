@@ -125,13 +125,23 @@ pub fn ReturnOf(comptime f: anytype) type {
     return @typeInfo(@TypeOf(f)).@"fn".return_type.?;
 }
 
+// A component that declares `pub fn provide` hands what that returns to the
+// functions inside it, which receive it by its type as they would a field.
+pub fn provides(comptime View: type) bool {
+    return isComponent(View) and @hasDecl(View, "provide");
+}
+
+pub fn Provided(comptime View: type) type {
+    return ReturnOf(View.provide);
+}
+
 pub fn Resolved(comptime View: type) type {
     return if (isShow(View)) ReturnOf(View.func) else View;
 }
 
 // The widget of a container is its config, because its children have nodes
 // of their own. The arena holds the strings made by Context.print until the
-// next build.
+// next build, and `given` what the component provided at its last build.
 pub fn Node(comptime View: type) type {
     return struct {
         id: NodeId,
@@ -141,6 +151,7 @@ pub fn Node(comptime View: type) type {
         children: Children(View),
         dirty: if (isComponent(View)) bool else void,
         arena: if (isComponent(View)) std.heap.ArenaAllocator.State else void,
+        given: if (provides(View)) Provided(View) else void,
     };
 }
 

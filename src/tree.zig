@@ -3,6 +3,7 @@ const std = @import("std");
 const call = @import("call.zig");
 const invoke = call.invoke;
 const node_zig = @import("node.zig");
+const Provided = node_zig.Provided;
 const Resolved = node_zig.Resolved;
 const State = node_zig.State;
 const contains = node_zig.contains;
@@ -11,9 +12,22 @@ const isComponent = node_zig.isComponent;
 const isContainer = node_zig.isContainer;
 const isList = node_zig.isList;
 const isShow = node_zig.isShow;
+const provides = node_zig.provides;
+const same = @import("anime.zig").same;
 
 fn isAnimated(comptime View: type) bool {
     return isContainer(View) and @hasField(@FieldType(View, "config"), "tween");
+}
+
+// What the component `View` provides. `inner` are its owners and its own
+// node. The value cannot be made of the one it replaces.
+fn provided(comptime View: type, inner: anytype, state: *State) Provided(View) {
+    comptime for (@typeInfo(@TypeOf(View.provide)).@"fn".params) |param| {
+        if (call.Pointee(param.type.?) == Provided(View)) {
+            @compileError("the provide of " ++ @typeName(View) ++ " receives the type it provides");
+        }
+    };
+    return invoke(View.provide, inner, state, {});
 }
 
 // What a view stands for: the result of its function for a `show`.
@@ -28,7 +42,8 @@ fn resolve(value: anytype, state: *State, owners: anytype) Resolved(@TypeOf(valu
 //
 // A component may declare `pub fn mount` and `pub fn unmount`. They run when
 // its node enters and leaves the tree, and their parameters are filled in by
-// type, as described at `invoke` in call.zig.
+// type, as described at `invoke` in call.zig. `pub fn provide` runs after
+// `mount` and whenever the component is built again.
 pub fn mount(node: anytype, value: anytype, state: *State, owners: anytype) void {
     const View = @TypeOf(value);
     if (comptime isShow(View)) return mount(node, resolve(value, state, owners), state, owners);
@@ -43,6 +58,7 @@ pub fn mount(node: anytype, value: anytype, state: *State, owners: anytype) void
         node.arena = .init;
         const inner = owners ++ .{node};
         if (comptime @hasDecl(View, "mount")) invoke(View.mount, inner, state, {});
+        if (comptime provides(View)) node.given = provided(View, inner, state);
         mount(&node.children[0], View.view, state, inner);
     } else if (comptime isList(View)) {
         node.widget = value;
@@ -135,6 +151,13 @@ pub fn rebuild(node: anytype, state: *State, owners: anytype) void {
             state.built = true;
             const last = node.arena.promote(state.gpa);
             node.arena = .init;
+            // A new value reaches the components inside only when they are
+            // built again too.
+            if (comptime provides(Widget)) {
+                const next = provided(Widget, inner, state);
+                if (!same(Provided(Widget), next, node.given)) markAll(&node.children[0]);
+                node.given = next;
+            }
             apply(&node.children[0], Widget.view, state, inner, .view);
             rebuild(&node.children[0], state, inner);
             return last.deinit();
