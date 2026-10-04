@@ -4,6 +4,7 @@ const Context = @import("cx.zig");
 const node_zig = @import("node.zig");
 const ReturnOf = node_zig.ReturnOf;
 const State = node_zig.State;
+const tree = @import("tree.zig");
 
 // Where a value lives among the owners: in a field of an owner, or as the
 // owner itself when `field` is null.
@@ -62,19 +63,66 @@ pub fn source(comptime Owners: type, comptime P: type) Source {
 // Whether a parameter of type `P` is filled in from the owners. One that is
 // not stands for the event.
 pub fn fills(comptime Owners: type, comptime P: type) bool {
-    return P == Context or find(Owners, P) != null;
+    return P == Context or isCallback(P) or find(Owners, P) != null;
+}
+
+// A function that a component is given when it is written in a view, for the
+// component to call later: `f` is a function, or `{}` for none. A function
+// of the component receives it by declaring a parameter of this type and
+// runs it with `call`. The parameters of `f` are filled in by type as if it
+// were given to a modifier at the place of the component, and the components
+// it receives as mutable pointers are built again.
+pub fn Callback(comptime f: anytype) type {
+    return struct {
+        owners: *const anyopaque = undefined,
+        state: *const State = undefined,
+        run: *const fn (*const anyopaque, *const State) void = undefined,
+
+        pub const callee = f;
+
+        pub fn call(given: @This()) void {
+            if (@TypeOf(f) != void) given.run(given.owners, given.state);
+        }
+    };
+}
+
+fn isCallback(comptime P: type) bool {
+    return @typeInfo(P) == .@"struct" and @hasDecl(P, "callee");
+}
+
+// The owners of the place where the innermost of `Owners` is written.
+fn Outer(comptime Owners: type) type {
+    const fields = @typeInfo(Owners).@"struct".fields;
+    var element_types: [fields.len - 1]type = undefined;
+    for (&element_types, fields[0 .. fields.len - 1]) |*element, field| element.* = field.type;
+    return @Tuple(&element_types);
+}
+
+fn bind(comptime P: type, owners: anytype, state: *const State) P {
+    if (@TypeOf(P.callee) == void) return .{};
+    const Owners = @TypeOf(owners.*);
+    return .{ .owners = owners, .state = state, .run = struct {
+        fn run(erased: *const anyopaque, shared: *const State) void {
+            const inner: *const Owners = @ptrCast(@alignCast(erased));
+            var outer: Outer(Owners) = undefined;
+            inline for (0..outer.len) |i| outer[i] = inner.*[i];
+            invoke(P.callee, outer, shared, {});
+            tree.markTargets(P.callee, outer);
+        }
+    }.run };
 }
 
 fn argument(comptime P: type, owners: anytype, state: *const State, event: anytype) P {
     if (P == Context) {
         if (owners.len == 0) @compileError("ui.Context is only available inside a component");
-        const node = owners[owners.len - 1];
+        const node = owners.*[owners.len - 1];
         return .{ .id = node.id, .state = state, .arena = &node.arena, .gpa = state.gpa };
     }
     if (P == @TypeOf(event)) return event;
+    if (comptime isCallback(P)) return bind(P, owners, state);
 
-    const from = comptime source(@TypeOf(owners), P);
-    const widget = &owners[from.owner].widget;
+    const from = comptime source(@TypeOf(owners.*), P);
+    const widget = &owners.*[from.owner].widget;
     const value = if (comptime from.field) |name| &@field(widget, name) else widget;
     return if (comptime @typeInfo(P) == .pointer) value else value.*;
 }
@@ -88,7 +136,7 @@ pub fn invoke(comptime f: anytype, owners: anytype, state: *const State, event: 
     var args: std.meta.ArgsTuple(@TypeOf(f)) = undefined;
     inline for (@typeInfo(@TypeOf(f)).@"fn".params, 0..) |param, i| {
         const P = param.type orelse @compileError("parameters must have concrete types");
-        args[i] = argument(P, owners, state, event);
+        args[i] = argument(P, &owners, state, event);
     }
     return @call(.auto, f, args);
 }

@@ -1284,3 +1284,44 @@ test "a key handler copies to the clipboard of the implementation and pastes fro
     try press(&s, 'c', ctrl);
     try expectEqualStrings("abab", s.impl.clipboard.items);
 }
+
+fn Stepper(comptime on_step: anytype) type {
+    return struct {
+        pub const view = ui.text("+").tap(step);
+
+        fn step(stepped: ui.Callback(on_step)) void {
+            stepped.call();
+        }
+    };
+}
+
+const Tally = struct {
+    count: u32 = 0,
+    asked: u32 = 0,
+
+    pub const view = ui.column(.{ ui.show(label), Stepper(add){}, Stepper({}){} });
+
+    fn label(self: *const Tally, cx: ui.Context) ui.Text {
+        return ui.text(cx.print("{d}", .{self.count}));
+    }
+
+    fn add(self: *Tally, cx: ui.Context) void {
+        self.count += 1;
+        self.asked = cx.id;
+    }
+};
+
+test "a callback given to a component runs as if written where the component is, and builds what it changes again" {
+    var s: Scene(Tally) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+
+    const column = &s.root.children[0];
+    try click(&s, centerOf(&column.children[1]));
+    try expectEqualStrings("1", column.children[0].widget.content);
+    try expectEqual(s.root.id, s.root.widget.asked);
+
+    // A component that was given no function calls nothing.
+    try click(&s, centerOf(&column.children[2]));
+    try expectEqual(1, s.root.widget.count);
+}

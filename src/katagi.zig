@@ -33,6 +33,7 @@ pub const Constraint = types.Constraint;
 pub const inf = types.inf;
 pub const Animation = anim.Animation;
 pub const Context = @import("cx.zig");
+pub const Callback = @import("call.zig").Callback;
 
 pub const measure = pass.measure;
 pub const layout = pass.layout;
