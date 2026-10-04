@@ -1,3 +1,5 @@
+const builtin = @import("builtin");
+
 const types = @import("types.zig");
 const Point = types.Point;
 const call = @import("call.zig");
@@ -25,6 +27,11 @@ pub const MouseButtonEvent = struct {
     y: f32 = 0,
 };
 
+const shift_bits = 0x0003;
+const ctrl_bits = 0x00c0;
+const alt_bits = 0x0300;
+const gui_bits = 0x0c00;
+
 pub const KeyPress = struct {
     key: u32 = 0,
     mod: u16 = 0,
@@ -32,11 +39,22 @@ pub const KeyPress = struct {
     repeat: bool = false,
 
     pub fn shift(press: KeyPress) bool {
-        return press.mod & 0x0003 != 0;
+        return press.mod & shift_bits != 0;
     }
 
     pub fn ctrl(press: KeyPress) bool {
-        return press.mod & 0x00c0 != 0;
+        return press.mod & ctrl_bits != 0;
+    }
+
+    pub fn alt(press: KeyPress) bool {
+        return press.mod & alt_bits != 0;
+    }
+
+    // Whether the key of shortcuts is held: Cmd on macOS and Ctrl elsewhere,
+    // where Ctrl together with Alt is AltGr, which types characters.
+    pub fn command(press: KeyPress) bool {
+        if (builtin.os.tag.isDarwin()) return press.mod & gui_bits != 0;
+        return press.ctrl() and !press.alt();
     }
 
     // Whether the key is Ctrl, Shift, Alt or GUI on either side.
