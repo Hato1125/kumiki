@@ -30,6 +30,7 @@ pub const Color = types.Color;
 pub const Point = types.Point;
 pub const Extent = types.Extent;
 pub const Bounds = types.Bounds;
+pub const Range = types.Range;
 pub const Constraint = types.Constraint;
 pub const inf = types.inf;
 pub const Animation = anim.Animation;

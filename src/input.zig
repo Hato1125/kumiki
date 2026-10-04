@@ -100,10 +100,13 @@ pub const keys = struct {
 
 // Text that was typed, or that an input method is still composing: each
 // composition replaces the one before, and an empty one ends it. `text` is
-// UTF-8 and only valid while the function it is given to runs.
+// UTF-8 and only valid while the function it is given to runs. `marked` are
+// the bytes of a composition that the input method works on, with its caret
+// at their start, or null when it does not tell.
 pub const TextInput = struct {
     text: []const u8,
     composing: bool = false,
+    marked: ?types.Range = null,
 };
 
 // How far the wheel turned while the pointer was at `at`. As SDL3 reports

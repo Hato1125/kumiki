@@ -168,7 +168,11 @@ pub const Window = struct {
                 .at = .{ .x = event.wheel.mouse_x, .y = event.wheel.mouse_y },
             } },
             c.SDL_EVENT_TEXT_INPUT => .{ .text = .{ .text = std.mem.span(event.text.text) } },
-            c.SDL_EVENT_TEXT_EDITING => .{ .text = .{ .text = std.mem.span(event.edit.text), .composing = true } },
+            c.SDL_EVENT_TEXT_EDITING => .{ .text = .{
+                .text = std.mem.span(event.edit.text),
+                .composing = true,
+                .marked = marked(std.mem.span(event.edit.text), event.edit.start, event.edit.length),
+            } },
             c.SDL_EVENT_KEY_DOWN, c.SDL_EVENT_KEY_UP => .{ .key = .{
                 .key = event.key.key,
                 .mod = event.key.mod,
@@ -179,6 +183,24 @@ pub const Window = struct {
         };
     }
 };
+
+// SDL counts the marked part of a composition in characters, from `start`
+// over `length` of them, and gives -1 for what it does not know.
+fn marked(text: []const u8, start: i32, length: i32) ?types.Range {
+    if (start < 0) return null;
+    var range: types.Range = .{ .start = text.len, .end = text.len };
+    var characters: i32 = 0;
+    for (text, 0..) |byte, at| {
+        if (byte & 0xc0 == 0x80) continue;
+        if (characters == start) range.start = at;
+        if (characters == start + @max(0, length)) {
+            range.end = at;
+            break;
+        }
+        characters += 1;
+    }
+    return range;
+}
 
 // Opens a window showing `root`, a component, and returns when it is closed.
 pub fn run(gpa: std.mem.Allocator, options: Window.Options, root: anytype) !void {
