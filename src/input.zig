@@ -10,6 +10,7 @@ const Path = node_zig.Path;
 const State = node_zig.State;
 const each = node_zig.each;
 const isFocusable = node_zig.isFocusable;
+const has = node_zig.has;
 const isInput = node_zig.isInput;
 const isKey = node_zig.isKey;
 const isPointer = node_zig.isPointer;
@@ -218,23 +219,34 @@ fn boundsOf(node: anytype) types.Bounds {
 }
 
 // The node that takes typed text and where an input method shows what it
-// offers for it.
+// offers for it. `area` is null when the node takes none at the moment.
 pub const Typing = struct {
     target: NodeId = 0,
     area: ?types.Bounds = null,
 };
 
 // Finds the nearest node that takes typed text among `target` and its
-// ancestors. Its area is its bounds.
+// ancestors. Its area is its bounds, unless a leaf inside it declares
+// `pub fn caret(leaf, bounds) ?ui.Bounds`: the leaf then says where in its
+// bounds the text goes, or null to take none.
 pub fn typingArea(node: anytype, target: NodeId, found: *Typing) bool {
     if (node.id != target and !each(node, .shown, typingArea, .{ target, found })) return false;
     if (comptime isInput(@TypeOf(node.widget))) {
         if (found.target == 0) {
             found.target = node.id;
             found.area = boundsOf(node);
+            _ = each(node, .shown, caretIn, .{&found.area});
         }
     }
     return true;
+}
+
+fn caretIn(node: anytype, area: *?types.Bounds) bool {
+    if (comptime has(@TypeOf(node.widget), "caret")) {
+        area.* = node.widget.caret(boundsOf(node));
+        return true;
+    }
+    return each(node, .shown, caretIn, .{area});
 }
 
 // What is offered to a node and then to its ancestors.
