@@ -20,6 +20,8 @@ pub const Window = struct {
         title: [:0]const u8 = "katagi",
         width: u32 = 800,
         height: u32 = 600,
+        min: Extent = .{},
+        max: Extent = .{},
         font: ?[:0]const u8 = null,
         fonts: []const [:0]const u8 = &.{},
     };
@@ -43,6 +45,17 @@ pub const Window = struct {
             c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_HIGH_PIXEL_DENSITY | c.SDL_WINDOW_RESIZABLE,
         ) orelse return error.CreateWindow;
         errdefer c.SDL_DestroyWindow(window);
+
+        _ = c.SDL_SetWindowMinimumSize(
+            window,
+            std.math.lossyCast(c_int, options.min.width),
+            std.math.lossyCast(c_int, options.min.height),
+        );
+        _ = c.SDL_SetWindowMaximumSize(
+            window,
+            std.math.lossyCast(c_int, options.max.width),
+            std.math.lossyCast(c_int, options.max.height),
+        );
 
         const gl = c.SDL_GL_CreateContext(window) orelse return error.CreateGlContext;
         errdefer _ = c.SDL_GL_DestroyContext(gl);
