@@ -10,6 +10,7 @@ const Constraint = types.Constraint;
 const Extent = types.Extent;
 const Point = types.Point;
 const pass = @import("layout.zig");
+const HandlerKind = @import("node.zig").HandlerKind;
 const Resolved = @import("node.zig").Resolved;
 const Painter = @import("paint.zig").Painter;
 const Alignment = @import("stack.zig").Alignment;
@@ -250,45 +251,28 @@ pub fn opacity(self: anytype, value: f32) Wrapped(@TypeOf(self), Opacity) {
     return with(self, Opacity{ .value = value });
 }
 
-fn Tap(comptime action: anytype) type {
+fn Handler(comptime kind: HandlerKind, comptime f: anytype) type {
     return struct {
-        pub const tap_action = action;
+        pub const handler_kind = kind;
+        pub const handler = f;
     };
 }
 
 // Runs `action` on a click, or on Enter or Space while focused. Components
 // that `action` receives as mutable pointers are built again after it runs.
-pub fn tap(self: anytype, comptime action: anytype) Wrapped(@TypeOf(self), Tap(action)) {
-    return with(self, Tap(action){});
-}
-
-fn Key(comptime handler: anytype) type {
-    return struct {
-        pub const key_handler = handler;
-    };
+pub fn tap(self: anytype, comptime action: anytype) Wrapped(@TypeOf(self), Handler(.tap, action)) {
+    return with(self, Handler(.tap, action){});
 }
 
 // Offers key presses to `handler`, which returns whether it used the key.
-pub fn key(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Key(handler)) {
-    return with(self, Key(handler){});
-}
-
-fn Wheeled(comptime handler: anytype) type {
-    return struct {
-        pub const wheel_handler = handler;
-    };
+pub fn key(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Handler(.key, handler)) {
+    return with(self, Handler(.key, handler){});
 }
 
 // Offers the turns of the wheel over the view to `handler`, in a ui.Wheel
 // parameter. `handler` returns whether it used the turn.
-pub fn wheel(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Wheeled(handler)) {
-    return with(self, Wheeled(handler){});
-}
-
-fn Held(comptime handler: anytype) type {
-    return struct {
-        pub const pointer_handler = handler;
-    };
+pub fn wheel(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Handler(.wheel, handler)) {
+    return with(self, Handler(.wheel, handler){});
 }
 
 // Offers what the left button does over the view to `handler`, in a
@@ -296,20 +280,14 @@ fn Held(comptime handler: anytype) type {
 // holds the pointer: the moves and the release reach it wherever the pointer
 // goes. While the pointer is held outside the view, the last move repeats on
 // every frame, so that the view can scroll after it.
-pub fn pointer(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Held(handler)) {
-    return with(self, Held(handler){});
-}
-
-fn Input(comptime handler: anytype) type {
-    return struct {
-        pub const input_handler = handler;
-    };
+pub fn pointer(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Handler(.pointer, handler)) {
+    return with(self, Handler(.pointer, handler){});
 }
 
 // Offers the text that is typed while the view, or something inside it, has
 // the focus to `handler`, in a ui.TextInput parameter.
-pub fn input(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Input(handler)) {
-    return with(self, Input(handler){});
+pub fn input(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Handler(.input, handler)) {
+    return with(self, Handler(.input, handler){});
 }
 
 fn Animated(comptime Child: type) type {

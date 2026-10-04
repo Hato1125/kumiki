@@ -91,28 +91,14 @@ pub fn isContainer(comptime T: type) bool {
     return @hasField(T, "children");
 }
 
-pub fn isTap(comptime T: type) bool {
-    return @hasDecl(T, "tap_action");
-}
+pub const HandlerKind = enum { tap, key, input, wheel, pointer };
 
-pub fn isKey(comptime T: type) bool {
-    return @hasDecl(T, "key_handler");
-}
-
-pub fn isWheel(comptime T: type) bool {
-    return @hasDecl(T, "wheel_handler");
-}
-
-pub fn isInput(comptime T: type) bool {
-    return @hasDecl(T, "input_handler");
-}
-
-pub fn isPointer(comptime T: type) bool {
-    return @hasDecl(T, "pointer_handler");
+pub fn handles(comptime T: type, comptime kind: HandlerKind) bool {
+    return @hasDecl(T, "handler_kind") and T.handler_kind == kind;
 }
 
 pub fn isFocusable(comptime T: type) bool {
-    return isTap(T) or isKey(T) or isInput(T);
+    return handles(T, .tap) or handles(T, .key) or handles(T, .input);
 }
 
 // Whether a widget takes part in a pass through its declaration `name`. A

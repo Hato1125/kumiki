@@ -11,11 +11,7 @@ const State = node_zig.State;
 const each = node_zig.each;
 const isFocusable = node_zig.isFocusable;
 const has = node_zig.has;
-const isInput = node_zig.isInput;
-const isKey = node_zig.isKey;
-const isPointer = node_zig.isPointer;
-const isTap = node_zig.isTap;
-const isWheel = node_zig.isWheel;
+const handles = node_zig.handles;
 const task_zig = @import("task.zig");
 const markTargets = @import("tree.zig").markTargets;
 
@@ -160,7 +156,7 @@ pub const Nearest = struct {
 pub fn nearest(node: anytype, target: NodeId, found: *Nearest) bool {
     if (node.id != target and !each(node, .shown, nearest, .{ target, found })) return false;
     const Widget = @TypeOf(node.widget);
-    if (comptime isTap(Widget)) {
+    if (comptime handles(Widget, .tap)) {
         if (found.tap == 0) found.tap = node.id;
     }
     if (comptime isFocusable(Widget)) {
@@ -231,7 +227,7 @@ pub const Typing = struct {
 // bounds the text goes, or null to take none.
 pub fn typingArea(node: anytype, target: NodeId, found: *Typing) bool {
     if (node.id != target and !each(node, .shown, typingArea, .{ target, found })) return false;
-    if (comptime isInput(@TypeOf(node.widget))) {
+    if (comptime handles(@TypeOf(node.widget), .input)) {
         if (found.target == 0) {
             found.target = node.id;
             found.area = boundsOf(node);
@@ -254,52 +250,40 @@ pub const Offer = union(enum) { click, wheel: Wheel, key: KeyPress, text: TextIn
 
 // Enter and Space activate a tap, except while text is typed: they belong to
 // the text then.
+fn activates(offer: Offer, state: *const State) bool {
+    return switch (offer) {
+        .click => true,
+        .key => |press| state.typing == null and press.down and
+            (press.key == keys.enter or press.key == keys.space),
+        .wheel, .text, .pointer => false,
+    };
+}
+
 fn handle(node: anytype, offer: Offer, owners: anytype, state: *const State) bool {
     const Widget = @TypeOf(node.widget);
-    if (comptime isPointer(Widget)) {
-        if (offer == .pointer) {
+    if (comptime !@hasDecl(Widget, "handler_kind")) return false;
+    const f = Widget.handler;
+    switch (comptime Widget.handler_kind) {
+        .tap => {
+            if (!activates(offer, state)) return false;
+            _ = invoke(f, owners, state, {});
+        },
+        .input => {
+            if (offer != .text) return false;
+            invoke(f, owners, state, offer.text);
+        },
+        .key => if (offer != .key or !invoke(f, owners, state, offer.key)) return false,
+        .wheel => if (offer != .wheel or !invoke(f, owners, state, offer.wheel)) return false,
+        .pointer => {
+            if (offer != .pointer) return false;
             var local = offer.pointer;
             local.x -= node.offset.x;
             local.y -= node.offset.y;
-            if (invoke(Widget.pointer_handler, owners, state, local)) {
-                markTargets(Widget.pointer_handler, owners);
-                return true;
-            }
-        }
+            if (!invoke(f, owners, state, local)) return false;
+        },
     }
-    if (comptime isInput(Widget)) {
-        if (offer == .text) {
-            invoke(Widget.input_handler, owners, state, offer.text);
-            markTargets(Widget.input_handler, owners);
-            return true;
-        }
-    }
-    if (comptime isWheel(Widget)) {
-        if (offer == .wheel and invoke(Widget.wheel_handler, owners, state, offer.wheel)) {
-            markTargets(Widget.wheel_handler, owners);
-            return true;
-        }
-    }
-    if (comptime isKey(Widget)) {
-        if (offer == .key and invoke(Widget.key_handler, owners, state, offer.key)) {
-            markTargets(Widget.key_handler, owners);
-            return true;
-        }
-    }
-    if (comptime isTap(Widget)) {
-        const activates = switch (offer) {
-            .click => true,
-            .key => |press| state.typing == null and press.down and
-                (press.key == keys.enter or press.key == keys.space),
-            .wheel, .text, .pointer => false,
-        };
-        if (activates) {
-            _ = invoke(Widget.tap_action, owners, state, {});
-            markTargets(Widget.tap_action, owners);
-            return true;
-        }
-    }
-    return false;
+    markTargets(f, owners);
+    return true;
 }
 
 // Offers `offer` to `target` and then to its ancestors until one handles
