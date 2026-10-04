@@ -1141,6 +1141,10 @@ test "the advance of text counts the spaces at its end, and text without ink has
     try std.testing.expectApproxEqAbs(word.advance() + 2 * space, ui.text("ab  ").advance(), 0.01);
     try std.testing.expectApproxEqAbs(word.measure(.{}).width, word.advance(), 2);
     try std.testing.expectApproxEqAbs(word.advance() + 2 * 3, word.tracking(3).advance(), 0.01);
+
+    // Asking for the advance of a space must not spoil the text that starts
+    // with one.
+    try expect(ui.text(" ab").measure(.{}).width > word.measure(.{}).width);
 }
 
 const Dial = struct {

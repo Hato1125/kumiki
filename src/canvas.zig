@@ -49,10 +49,11 @@ pub const TextStyle = struct {
 // The C API takes NUL-terminated strings, so text is copied here first.
 var text_buffer: std.ArrayList(u8) = .empty;
 
-fn terminated(s: []const u8) [*:0]const u8 {
+fn terminated(s: []const u8, tail: []const u8) [*:0]const u8 {
     text_buffer.clearRetainingCapacity();
-    text_buffer.ensureTotalCapacity(std.heap.c_allocator, s.len + 1) catch @panic("out of memory");
+    text_buffer.ensureTotalCapacity(std.heap.c_allocator, s.len + tail.len + 1) catch @panic("out of memory");
     text_buffer.appendSliceAssumeCapacity(s);
+    text_buffer.appendSliceAssumeCapacity(tail);
     text_buffer.appendAssumeCapacity(0);
     return @ptrCast(text_buffer.items.ptr);
 }
@@ -81,7 +82,7 @@ fn newText(s: []const u8, style: TextStyle, width: f32) c.Tvg_Paint {
     const text = c.tvg_text_new();
     _ = c.tvg_text_set_font(text, if (style.font orelse default_font) |name| name.ptr else null);
     _ = c.tvg_text_set_size(text, style.size * points_per_pixel);
-    _ = c.tvg_text_set_text(text, terminated(s));
+    _ = c.tvg_text_set_text(text, terminated(s, ""));
 
     var letter: f32 = 1;
     if (style.tracking != 0 and s.len > 0) {
@@ -117,26 +118,44 @@ pub fn measureText(s: []const u8, style: TextStyle, width: f32) Extent {
     return .{ .width = if (width > 0) @min(natural, width) else natural, .height = height };
 }
 
+// Measures how far texts in one style advance. The advance is read off the
+// ink of a bar put after the text. ThorVG has metrics for each glyph, but
+// once it is asked for those of a glyph without ink, such as a space, it no
+// longer draws any text that starts with that glyph.
+const Ruler = struct {
+    text: c.Tvg_Paint,
+    // How far the ink of the bar alone reaches.
+    alone: f32,
+    tracking: f32,
+
+    const bar = "|";
+
+    fn init(style: TextStyle) Ruler {
+        var plain = style;
+        plain.tracking = 0;
+        const text = newText(bar, plain, 0);
+        return .{ .text = text, .alone = inkWidth(text), .tracking = style.tracking };
+    }
+
+    fn deinit(ruler: Ruler) void {
+        _ = c.tvg_paint_rel(ruler.text);
+    }
+
+    fn advance(ruler: Ruler, s: []const u8) f32 {
+        if (s.len == 0) return 0;
+        _ = c.tvg_text_set_text(ruler.text, terminated(s, bar));
+        const count: f32 = @floatFromInt(std.unicode.utf8CountCodepoints(s) catch s.len);
+        return inkWidth(ruler.text) - ruler.alone + ruler.tracking * count;
+    }
+};
+
 // The distance from the start of `s` to where a character after it would go.
 // Unlike the width that measureText gives, it counts the spaces at the end.
 pub fn textAdvance(s: []const u8, style: TextStyle) f32 {
-    var plain = style;
-    plain.tracking = 0;
-    const text = newText("", plain, 0);
-    defer _ = c.tvg_paint_rel(text);
-
-    var total: f32 = 0;
-    var rest = s;
-    while (rest.len > 0) {
-        const len = @min(rest.len, std.unicode.utf8ByteSequenceLength(rest[0]) catch 1);
-        var char: [5]u8 = @splat(0);
-        @memcpy(char[0..len], rest[0..len]);
-        var metrics = std.mem.zeroes(c.Tvg_Glyph_Metrics);
-        _ = c.tvg_text_get_glyph_metrics(text, &char, &metrics, null);
-        total += metrics.advance + style.tracking;
-        rest = rest[len..];
-    }
-    return total;
+    if (s.len == 0) return 0;
+    const ruler: Ruler = .init(style);
+    defer ruler.deinit();
+    return ruler.advance(s);
 }
 
 // A PNG or JPG file that is read once and drawn as often as needed. It lives
