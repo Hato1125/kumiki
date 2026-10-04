@@ -12,6 +12,7 @@ const each = node_zig.each;
 const isFocusable = node_zig.isFocusable;
 const has = node_zig.has;
 const handles = node_zig.handles;
+const offsetOf = node_zig.offsetOf;
 const task_zig = @import("task.zig");
 const markTargets = @import("tree.zig").markTargets;
 
@@ -138,8 +139,9 @@ pub fn findPath(node: anytype, target: NodeId, path: *Path) bool {
 // Collects the deepest node at `at` and its ancestors. Later children are in
 // front of earlier ones.
 pub fn hit(node: anytype, at: Point, path: *Path) bool {
-    const x = at.x - node.offset.x;
-    const y = at.y - node.offset.y;
+    const origin = offsetOf(node);
+    const x = at.x - origin.x;
+    const y = at.y - origin.y;
     if (x < 0 or x >= node.size.width or y < 0 or y >= node.size.height) return false;
     _ = each(node, .front, hit, .{ at, path });
     path.push(node.id);
@@ -211,7 +213,13 @@ pub fn walkFocus(node: anytype, walk: *FocusWalk) void {
 }
 
 fn boundsOf(node: anytype) types.Bounds {
-    return .{ .x = node.offset.x, .y = node.offset.y, .w = node.size.width, .h = node.size.height };
+    const at = offsetOf(node);
+    return .{
+        .x = at.x,
+        .y = at.y,
+        .w = node.size.width,
+        .h = node.size.height,
+    };
 }
 
 // The node that takes typed text and where an input method shows what it
@@ -246,7 +254,13 @@ fn caretIn(node: anytype, area: *?types.Bounds) bool {
 }
 
 // What is offered to a node and then to its ancestors.
-pub const Offer = union(enum) { click, wheel: Wheel, key: KeyPress, text: TextInput, pointer: Pointer };
+pub const Offer = union(enum) {
+    click,
+    wheel: Wheel,
+    key: KeyPress,
+    text: TextInput,
+    pointer: Pointer,
+};
 
 // Enter and Space activate a tap, except while text is typed: they belong to
 // the text then.
@@ -276,9 +290,10 @@ fn handle(node: anytype, offer: Offer, owners: anytype, state: *const State) boo
         .wheel => if (offer != .wheel or !invoke(f, owners, state, offer.wheel)) return false,
         .pointer => {
             if (offer != .pointer) return false;
+            const origin = offsetOf(node);
             var local = offer.pointer;
-            local.x -= node.offset.x;
-            local.y -= node.offset.y;
+            local.x -= origin.x;
+            local.y -= origin.y;
             if (!invoke(f, owners, state, local)) return false;
         },
     }

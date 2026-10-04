@@ -31,9 +31,10 @@ pub const Painter = struct {
 // `endPaint`.
 pub fn paint(node: anytype, canvas: *Canvas) void {
     const Widget = @TypeOf(node.widget);
+    const at = node_zig.offsetOf(node);
     const p: Painter = .{ .canvas = canvas, .bounds = .{
-        .x = node.offset.x,
-        .y = node.offset.y,
+        .x = at.x,
+        .y = at.y,
         .w = node.size.width,
         .h = node.size.height,
     } };

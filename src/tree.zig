@@ -50,7 +50,7 @@ pub fn mount(node: anytype, value: anytype, state: *State, owners: anytype) void
 
     state.next_id += 1;
     node.id = state.next_id;
-    node.offset = .{};
+    if (comptime @TypeOf(node.offset) != void) node.offset = .{};
     node.size = .{};
     if (comptime isComponent(View)) {
         node.widget = value;

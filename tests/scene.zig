@@ -19,7 +19,8 @@ fn frame(s: anytype) !void {
 }
 
 fn centerOf(node: anytype) ui.Point {
-    return .{ .x = node.offset.x + node.size.width / 2, .y = node.offset.y + node.size.height / 2 };
+    const at = ui.offsetOf(node);
+    return .{ .x = at.x + node.size.width / 2, .y = at.y + node.size.height / 2 };
 }
 
 fn press(s: anytype, key: u32, mod: u16) !void {
@@ -459,7 +460,7 @@ test "layout" {
     // 400 - 40 - 2 * 10 = 340 is shared 1 : 3.
     try expectEqual(85, row.children[1].size.width);
     try expectEqual(255, row.children[2].size.width);
-    try expectEqual(40 + 10 + 85 + 10, row.children[2].offset.x);
+    try expectEqual(40 + 10 + 85 + 10, ui.offsetOf(&row.children[2]).x);
 
     const line_height = ui.text("x").measure(.{}).height;
     const wrapped = &column.children[1];
@@ -795,7 +796,44 @@ test "a config that only paints draws around its child and keeps its layout" {
     const outlined = &s.root.children[0].children[0];
     const ink = &outlined.children[0].children[0];
     try expectEqual(ui.Extent{ .width = 30, .height = 10 }, outlined.size);
-    try expectEqual(ink.offset, outlined.offset);
+    try expectEqual(ink.offset, ui.offsetOf(outlined));
+}
+
+var marked: ui.Bounds = .{};
+
+const Mark = struct {
+    pub fn beginPaint(_: Mark, p: ui.Painter) void {
+        marked = p.bounds;
+    }
+};
+
+const Moved = struct {
+    taps: u32 = 0,
+
+    pub const view = ui.column(.{
+        ui.wrap(Ink{}).with(Mark{}).tap(count).padding(.{ .left = 7, .top = 9 }),
+    });
+
+    fn count(self: *Moved) void {
+        self.taps += 1;
+    }
+};
+
+test "a node that keeps no offset is painted and hit where its child is" {
+    var s: Scene(Moved) = try .init(gpa, options, .{});
+    defer s.deinit();
+
+    // Nothing here draws with the canvas, so it needs no OpenGL.
+    var blank: ui.Canvas = undefined;
+    s.impl.canvas = &blank;
+    trace = "";
+    try frame(&s);
+    try expectEqual(ui.Bounds{ .x = 7, .y = 9, .w = 30, .h = 10 }, marked);
+
+    try click(&s, .{ .x = 3, .y = 3 });
+    try expectEqual(0, s.root.widget.taps);
+    try click(&s, .{ .x = 8, .y = 10 });
+    try expectEqual(1, s.root.widget.taps);
 }
 
 const Inset = struct {

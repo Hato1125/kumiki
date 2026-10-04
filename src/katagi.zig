@@ -39,6 +39,7 @@ pub const Callback = @import("call.zig").Callback;
 
 pub const measure = pass.measure;
 pub const layout = pass.layout;
+pub const offsetOf = @import("node.zig").offsetOf;
 pub const Painter = @import("paint.zig").Painter;
 pub const Canvas = canvas.Canvas;
 pub const Path = canvas.Path;

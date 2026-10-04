@@ -35,7 +35,7 @@ fn measureLast(children: anytype, c: Constraint) Extent {
 pub fn layout(node: anytype, at: Point) void {
     const Widget = @TypeOf(node.widget);
     const children = &node.children;
-    node.offset = at;
+    if (comptime @TypeOf(node.offset) != void) node.offset = at;
     if (comptime @TypeOf(children.*) == void) return;
     if (comptime has(Widget, "layoutAll")) return node.widget.layoutAll(children, at, node.size);
     if (comptime has(Widget, "layout")) return node.widget.layout(&children[children.len - 1], at, node.size);

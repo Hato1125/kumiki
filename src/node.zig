@@ -125,13 +125,24 @@ pub fn Resolved(comptime View: type) type {
     return if (isShow(View)) ReturnOf(View.func) else View;
 }
 
+// Whether a node of `View` keeps its position. One that leaves its children
+// where it is, as a component always does, is where its last child is and
+// keeps none.
+fn keepsOffset(comptime View: type) bool {
+    if (isComponent(View)) return false;
+    if (!isContainer(View)) return true;
+    const Config = @FieldType(View, "config");
+    return @hasDecl(Config, "layout") or @hasDecl(Config, "layoutAll");
+}
+
 // The widget of a container is its config, because its children have nodes
 // of their own. The arena holds the strings made by Context.print until the
 // next build, and `given` what the component provided at its last build.
+// `offsetOf` reads the offset, which not every node keeps.
 pub fn Node(comptime View: type) type {
     return struct {
         id: NodeId,
-        offset: types.Point,
+        offset: if (keepsOffset(View)) types.Point else void,
         size: types.Extent,
         widget: if (isContainer(View) and !isComponent(View)) @FieldType(View, "config") else View,
         children: Children(View),
@@ -143,6 +154,13 @@ pub fn Node(comptime View: type) type {
 
 pub fn NodeOf(comptime View: type) type {
     return Node(Resolved(View));
+}
+
+// Where a node is: at its own offset, or where its last child is for a node
+// that keeps none.
+pub fn offsetOf(node: anytype) types.Point {
+    if (comptime @TypeOf(node.offset) != void) return node.offset;
+    return offsetOf(&node.children[node.children.len - 1]);
 }
 
 fn Children(comptime View: type) type {
