@@ -1147,6 +1147,23 @@ test "the advance of text counts the spaces at its end, and text without ink has
     try expect(ui.text(" ab").measure(.{}).width > word.measure(.{}).width);
 }
 
+test "the position in a text nearest to a distance lies between two code points" {
+    try ui.startup(options.font);
+    defer ui.shutdown();
+
+    const text = ui.text("a日本 b");
+    const first = ui.text("a").advance();
+    const second = ui.text("a日").advance();
+    try expectEqual(0, text.indexAt(-5));
+    try expectEqual(0, text.indexAt(first * 0.4));
+    try expectEqual(1, text.indexAt(first * 0.6));
+    try expectEqual(1, text.indexAt(first + (second - first) * 0.4));
+    try expectEqual(4, text.indexAt(first + (second - first) * 0.6));
+    try expectEqual(8, text.indexAt(ui.text("a日本 ").advance() + 1));
+    try expectEqual(9, text.indexAt(1000));
+    try expectEqual(0, ui.text("").indexAt(10));
+}
+
 const Dial = struct {
     turned: f32 = 0,
 

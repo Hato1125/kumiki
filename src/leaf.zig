@@ -52,6 +52,12 @@ pub const Text = struct {
         return canvas.textAdvance(text.content, text.style());
     }
 
+    // The position in the text whose advance is nearest to `x`: a byte
+    // offset between two code points, for a caret to go where a pointer is.
+    pub fn indexAt(text: Text, x: f32) usize {
+        return canvas.textIndexAt(text.content, text.style(), x);
+    }
+
     // Wraps when the text is wider than the space offered.
     pub fn measure(text: Text, c: Constraint) Extent {
         const natural = canvas.measureText(text.content, text.style(), 0);

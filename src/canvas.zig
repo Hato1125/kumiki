@@ -158,6 +158,39 @@ pub fn textAdvance(s: []const u8, style: TextStyle) f32 {
     return ruler.advance(s);
 }
 
+fn isContinuation(byte: u8) bool {
+    return byte & 0xc0 == 0x80;
+}
+
+// The position in `s` whose advance is nearest to `x`: a byte offset between
+// two code points. The text is halved until two neighbors are left, since
+// ThorVG only tells how wide a whole text is.
+pub fn textIndexAt(s: []const u8, style: TextStyle, x: f32) usize {
+    const ruler: Ruler = .init(style);
+    defer ruler.deinit();
+
+    var low: usize = 0;
+    var low_x: f32 = 0;
+    var high = s.len;
+    while (true) {
+        var middle = low + (high - low) / 2;
+        while (middle > low and isContinuation(s[middle])) middle -= 1;
+        if (middle == low) {
+            middle += 1;
+            while (middle < high and isContinuation(s[middle])) middle += 1;
+        }
+        if (middle >= high) break;
+        const middle_x = ruler.advance(s[0..middle]);
+        if (middle_x <= x) {
+            low = middle;
+            low_x = middle_x;
+        } else {
+            high = middle;
+        }
+    }
+    return if (x - low_x <= ruler.advance(s[0..high]) - x) low else high;
+}
+
 // A PNG or JPG file that is read once and drawn as often as needed. It lives
 // between `startup` and `shutdown`.
 pub const Image = struct {
