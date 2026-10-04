@@ -1591,3 +1591,34 @@ test "a composition ends when the typing moves to another input or the window lo
     try frame(&s);
     try expect(s.impl.typing != null);
 }
+
+test "a color fades without taking the tint of a transparent one" {
+    const violet: ui.Color = .{ .r = 100, .g = 80, .b = 160 };
+    const clear_gray: ui.Color = .{ .r = 70, .g = 70, .b = 70, .a = 0 };
+
+    const appearing = ui.Color.lerp(clear_gray, violet, 0.5);
+    try std.testing.expectEqual(ui.Color{ .r = 100, .g = 80, .b = 160, .a = 128 }, appearing);
+    const leaving = ui.Color.lerp(violet, clear_gray, 0.75);
+    try std.testing.expectEqual(ui.Color{ .r = 100, .g = 80, .b = 160, .a = 64 }, leaving);
+
+    try std.testing.expectEqual(violet, ui.Color.lerp(clear_gray, violet, 1));
+    try std.testing.expectEqual(clear_gray, ui.Color.lerp(violet, clear_gray, 1));
+}
+
+test "a color mixes opaque colors evenly and by alpha otherwise" {
+    const black: ui.Color = .black;
+    const white: ui.Color = .white;
+    try std.testing.expectEqual(ui.Color{ .r = 128, .g = 128, .b = 128 }, ui.Color.lerp(black, white, 0.5));
+
+    // The faint white weighs a quarter of the black beside it.
+    const faint_white: ui.Color = .{ .r = 255, .g = 255, .b = 255, .a = 64 };
+    const mixed = ui.Color.lerp(black, faint_white, 0.5);
+    try std.testing.expectEqual(ui.Color{ .r = 51, .g = 51, .b = 51, .a = 160 }, mixed);
+}
+
+test "a color does not overshoot" {
+    const from: ui.Color = .{ .r = 100, .g = 100, .b = 100 };
+    const to: ui.Color = .{ .r = 200, .g = 50, .b = 100, .a = 200 };
+    try std.testing.expectEqual(to, ui.Color.lerp(from, to, 1.2));
+    try std.testing.expectEqual(from, ui.Color.lerp(from, to, -0.2));
+}

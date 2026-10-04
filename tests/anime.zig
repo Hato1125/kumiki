@@ -23,6 +23,20 @@ test "lerp keeps integers in range when it overshoots" {
     try expectEqual(0, anim.lerp(u8, 250, 5, 1.2));
 }
 
+test "lerp leaves a struct that declares lerp to it" {
+    const Stepped = struct {
+        value: f32,
+
+        pub fn lerp(a: @This(), b: @This(), t: f32) @This() {
+            return if (t < 0.5) a else b;
+        }
+    };
+    const outer = struct { step: Stepped, plain: f32 };
+    const middle = anim.lerp(outer, .{ .step = .{ .value = 0 }, .plain = 0 }, .{ .step = .{ .value = 8 }, .plain = 8 }, 0.25);
+    try expectEqual(0, middle.step.value);
+    try expectEqual(2, middle.plain);
+}
+
 test "lerp keeps the largest integers in range" {
     const max = std.math.maxInt(u32);
     try expectEqual(max, anim.lerp(u32, max, max, 0.5));

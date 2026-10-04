@@ -160,8 +160,11 @@ pub fn same(comptime T: type, a: T, b: T) bool {
 
 // Values that cannot be interpolated, such as slices and enums, switch to
 // `b` at once. `t` may leave [0, 1]; integers then stop at the ends of their
-// range. They go through f64, which holds every 32-bit integer exactly.
+// range. They go through f64, which holds every 32-bit integer exactly. A
+// struct that declares `lerp(a, b, t)` is interpolated by it instead of
+// field by field.
 pub fn lerp(comptime T: type, a: T, b: T, t: f32) T {
+    if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "lerp")) return T.lerp(a, b, t);
     switch (@typeInfo(T)) {
         .float => return a + (b - a) * @as(T, @floatCast(t)),
         .int => {
