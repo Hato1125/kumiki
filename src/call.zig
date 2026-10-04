@@ -116,7 +116,7 @@ fn argument(comptime P: type, owners: anytype, state: *const State, event: anyty
     if (P == Context) {
         if (owners.len == 0) @compileError("ui.Context is only available inside a component");
         const node = owners.*[owners.len - 1];
-        return .{ .id = node.id, .state = state, .arena = &node.arena, .gpa = state.gpa };
+        return .{ .id = node.id, .state = state, .arena = &node.arena, .gpa = state.gpa, .size = node.size };
     }
     if (P == @TypeOf(event)) return event;
     if (comptime isCallback(P)) return bind(P, owners, state);

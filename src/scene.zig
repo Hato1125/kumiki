@@ -98,6 +98,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.state.tasks.waker.store(&s.impl, .release);
             var wait = !s.busy();
             while (s.impl.next(wait)) |event| : (wait = false) {
+                s.state.now = s.impl.now();
                 switch (event) {
                     .pointer_move => |at| s.hoverAt(at),
                     .pointer_leave => s.hoverAt(null),
@@ -113,6 +114,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .close => return false,
                 }
             }
+            s.state.now = s.impl.now();
             s.receive();
             s.update();
 
@@ -142,7 +144,6 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             const state = &s.state;
             const size = s.impl.size();
             s.pending = false;
-            state.now = s.impl.now();
             state.animating = false;
             state.built = false;
             state.stale = false;

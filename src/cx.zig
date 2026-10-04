@@ -5,6 +5,7 @@ const std = @import("std");
 
 const node_zig = @import("node.zig");
 const contains = node_zig.contains;
+const types = @import("types.zig");
 
 const Context = @This();
 
@@ -13,6 +14,8 @@ state: *const node_zig.State,
 arena: *std.heap.ArenaAllocator.State,
 // The allocator given to the Scene.
 gpa: std.mem.Allocator,
+// The size of this component at the last layout: zero before the first.
+size: types.Extent,
 
 // The focus, the pointer and the pressed tap count when they are on this
 // component or inside it.
@@ -52,6 +55,12 @@ pub fn paste(cx: Context) ?[]const u8 {
 
 pub fn copy(cx: Context, text: []const u8) void {
     cx.state.host.copy(cx.state.host.impl, text);
+}
+
+// The time in seconds of the event being handled, or else of this build. It
+// only serves to compare with other times of this clock.
+pub fn now(cx: Context) f64 {
+    return cx.state.now;
 }
 
 // The string stays valid until this component is built again. It is empty
