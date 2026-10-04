@@ -1325,3 +1325,41 @@ test "a callback given to a component runs as if written where the component is,
     try click(&s, centerOf(&column.children[2]));
     try expectEqual(1, s.root.widget.count);
 }
+
+var drawn_at: f64 = 0;
+
+const Needle = struct {
+    pub fn measure(_: Needle, c: ui.Constraint) ui.Extent {
+        return c.constrain(.{ .width = 10, .height = 10 });
+    }
+
+    pub fn paint(_: Needle, p: ui.Painter) void {
+        drawn_at = p.now();
+        p.again(p.now() + 2);
+        p.again(p.now() + 5);
+    }
+};
+
+const Watch = struct {
+    pub const view = ui.column(.{ui.wrap(Needle{})});
+};
+
+test "a painter that asks for another frame is given it at that time without anything being built" {
+    var s: Scene(Watch) = try .init(gpa, options, .{});
+    defer s.deinit();
+
+    // Nothing here draws with the canvas, so it needs no OpenGL.
+    var blank: ui.Canvas = undefined;
+    s.impl.canvas = &blank;
+    s.impl.seconds = 5;
+    try frame(&s);
+    try expectEqual(5, drawn_at);
+
+    // The scene waits for an event until the earliest time asked for.
+    try frame(&s);
+    try expectEqual(2, s.impl.waited);
+    s.impl.seconds = 7;
+    try frame(&s);
+    try expectEqual(7, drawn_at);
+    try expect(!s.state.built);
+}

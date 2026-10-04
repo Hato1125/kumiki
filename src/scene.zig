@@ -15,14 +15,15 @@ const tree = @import("tree.zig");
 
 // A tree of views with its focus and pointer. `Impl` hands over the events
 // and receives the drawing: `next(wait)` returns the next event or null, and
-// with `wait` only once something has arrived; `size()` and `now()`, in
-// seconds, are read on every frame; `begin()` returns the canvas to draw to,
-// or null to skip the drawing, and `end()` shows it; `wake()` makes a
-// waiting `next`, or else the next one that waits, return, and is called
-// from other threads; `input(area)` starts the typing of text at `area`, or
-// stops it when the area is null; `copy(text)` puts text into the clipboard
-// and returns whether it took it, and `paste(allocator)` returns a copy of
-// what it holds, or null.
+// waits up to `wait` seconds for one to arrive, not at all for 0 and without
+// end for infinity; `size()` and `now()`, in seconds, are read on every
+// frame; `begin()` returns the canvas to draw to, or null to skip the
+// drawing, and `end()` shows it; `wake()` makes a waiting `next`, or else
+// the next one that waits, return, and is called from other threads;
+// `input(area)` starts the typing of text at `area`, or stops it when the
+// area is null; `copy(text)` puts text into the clipboard and returns
+// whether it took it, and `paste(allocator)` returns a copy of what it
+// holds, or null.
 pub fn Scene(comptime Impl: type, comptime Root: type) type {
     if (!node_zig.isComponent(Root)) @compileError("the root must be a component with a view");
     inline for (.{
@@ -39,6 +40,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         size: Extent = .{},
         pointer: ?Point = null,
         pending: bool = true,
+        // When the last drawing asked for the next one.
+        again: f64 = std.math.inf(f64),
 
         const Self = @This();
 
@@ -97,8 +100,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         pub fn frame(s: *Self) !bool {
             s.state.host.impl = &s.impl;
             s.state.tasks.waker.store(&s.impl, .release);
-            var wait = !s.busy();
-            while (s.impl.next(wait)) |event| : (wait = false) {
+            var wait = if (s.busy()) 0 else s.again - s.impl.now();
+            while (s.impl.next(wait)) |event| : (wait = 0) {
                 s.state.now = s.impl.now();
                 switch (event) {
                     .pointer_move => |at| s.hoverAt(at),
@@ -119,8 +122,12 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.receive();
             s.update();
 
+            s.again = std.math.inf(f64);
             if (try s.impl.begin()) |canvas| {
+                canvas.now = s.state.now;
+                canvas.again = s.again;
                 paint(&s.root, canvas);
+                s.again = canvas.again;
                 try s.impl.end();
             }
             return true;

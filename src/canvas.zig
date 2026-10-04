@@ -303,6 +303,10 @@ pub const Canvas = struct {
     scale: f32 = 1,
     layers: [32]c.Tvg_Paint = undefined,
     depth: usize = 0,
+    // The time of the frame being drawn, and when the next one is due at
+    // the latest. The scene sets both and reads `again` after the drawing.
+    now: f64 = 0,
+    again: f64 = std.math.inf(f64),
 
     pub fn init(gl_context: ?*anyopaque, width: u32, height: u32) !Canvas {
         if (gl_context == null) return error.InvalidTarget;

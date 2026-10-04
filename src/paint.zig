@@ -14,6 +14,17 @@ pub const Painter = struct {
     pub fn stroke(p: Painter, radius: f32, width: f32, color: types.Color) void {
         p.canvas.strokeRect(p.bounds, radius, width, color);
     }
+
+    // The time of this frame in seconds, on the clock of Context.now.
+    pub fn now(p: Painter) f64 {
+        return p.canvas.now;
+    }
+
+    // Asks for another frame at `time`, for a drawing that changes with the
+    // time, such as a blinking caret, without anything being built again.
+    pub fn again(p: Painter, time: f64) void {
+        p.canvas.again = @min(p.canvas.again, time);
+    }
 };
 
 // Draws a widget in `paint`, and around its children in `beginPaint` and

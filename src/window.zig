@@ -61,10 +61,15 @@ pub const Window = struct {
 
     // After waiting, null also stands for events the scene does not see,
     // such as a resize, so that the frame is drawn again.
-    pub fn next(_: *Window, wait: bool) ?Event {
+    pub fn next(_: *Window, wait: f64) ?Event {
         var event: c.SDL_Event = undefined;
-        var arrived = if (wait) c.SDL_WaitEvent(&event) else c.SDL_PollEvent(&event);
-        if (wait and !arrived) @panic("SDL_WaitEvent failed");
+        var arrived = if (wait <= 0)
+            c.SDL_PollEvent(&event)
+        else if (std.math.isInf(wait))
+            c.SDL_WaitEvent(&event)
+        else
+            c.SDL_WaitEventTimeout(&event, std.math.lossyCast(i32, @ceil(wait * std.time.ms_per_s)));
+        if (std.math.isInf(wait) and !arrived) @panic("SDL_WaitEvent failed");
         while (arrived) : (arrived = c.SDL_PollEvent(&event)) {
             if (convert(&event)) |converted| return converted;
         }

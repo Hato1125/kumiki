@@ -22,6 +22,8 @@ seconds: f64 = 0,
 canvas: ?*ui.Canvas = null,
 // Where the scene asked for typed text, or null while it asks for none.
 typing: ?ui.Bounds = null,
+// How long the scene was ready to wait for the last event it asked for.
+waited: f64 = 0,
 // What was copied last. A test copies here itself to have it pasted, and
 // sets `refuses` to have the next copies fail.
 clipboard: std.ArrayList(u8) = .empty,
@@ -42,7 +44,8 @@ pub fn push(fake: *Fake, event: ui.Event) void {
     fake.count += 1;
 }
 
-pub fn next(fake: *Fake, _: bool) ?ui.Event {
+pub fn next(fake: *Fake, wait: f64) ?ui.Event {
+    fake.waited = wait;
     if (fake.count == 0) return null;
     defer fake.first = (fake.first + 1) % fake.queue.len;
     fake.count -= 1;
