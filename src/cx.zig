@@ -53,8 +53,9 @@ pub fn paste(cx: Context) ?[]const u8 {
     return cx.state.host.paste(cx.state.host.impl, arena.allocator());
 }
 
-pub fn copy(cx: Context, text: []const u8) void {
-    cx.state.host.copy(cx.state.host.impl, text);
+// Returns whether the clipboard took the text.
+pub fn copy(cx: Context, text: []const u8) bool {
+    return cx.state.host.copy(cx.state.host.impl, text);
 }
 
 // The time in seconds of the event being handled, or else of this build. It

@@ -1253,7 +1253,7 @@ const Scrap = struct {
     fn shortcut(self: *Scrap, key: ui.KeyPress, cx: ui.Context) bool {
         if (!key.down or !key.ctrl()) return false;
         switch (key.key) {
-            'c' => cx.copy(self.text.items),
+            'c' => _ = cx.copy(self.text.items),
             'v' => self.text.appendSlice(cx.gpa, cx.paste() orelse return false) catch @panic("out of memory"),
             else => return false,
         }
@@ -1272,7 +1272,7 @@ test "a key handler copies to the clipboard of the implementation and pastes fro
     try press(&s, 'v', ctrl);
     try expectEqualStrings("", s.root.widget.text.items);
 
-    s.impl.copy("ab");
+    _ = s.impl.copy("ab");
     try press(&s, 'v', ctrl);
     try press(&s, 'v', ctrl);
     try expectEqualStrings("abab", s.root.widget.text.items);

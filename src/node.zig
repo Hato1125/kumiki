@@ -68,7 +68,7 @@ pub const State = struct {
 pub const Host = struct {
     impl: *anyopaque,
     paste: *const fn (*anyopaque, std.mem.Allocator) ?[]const u8,
-    copy: *const fn (*anyopaque, []const u8) void,
+    copy: *const fn (*anyopaque, []const u8) bool,
 };
 
 pub fn isShow(comptime T: type) bool {

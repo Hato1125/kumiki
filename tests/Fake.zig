@@ -22,8 +22,10 @@ seconds: f64 = 0,
 canvas: ?*ui.Canvas = null,
 // Where the scene asked for typed text, or null while it asks for none.
 typing: ?ui.Bounds = null,
-// What was copied last. A test copies here itself to have it pasted.
+// What was copied last. A test copies here itself to have it pasted, and
+// sets `refuses` to have the next copies fail.
 clipboard: std.ArrayList(u8) = .empty,
+refuses: bool = false,
 
 pub fn init(gpa: std.mem.Allocator, options: Options) !Fake {
     try ui.startup(options.font);
@@ -73,7 +75,9 @@ pub fn paste(fake: *Fake, into: std.mem.Allocator) ?[]const u8 {
     return into.dupe(u8, fake.clipboard.items) catch @panic("out of memory");
 }
 
-pub fn copy(fake: *Fake, text: []const u8) void {
+pub fn copy(fake: *Fake, text: []const u8) bool {
+    if (fake.refuses) return false;
     fake.clipboard.clearRetainingCapacity();
     fake.clipboard.appendSlice(fake.gpa, text) catch @panic("out of memory");
+    return true;
 }

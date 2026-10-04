@@ -102,10 +102,10 @@ pub const Window = struct {
     }
 
     // SDL takes a NUL-terminated string.
-    pub fn copy(_: *Window, text: []const u8) void {
+    pub fn copy(_: *Window, text: []const u8) bool {
         const terminated = std.heap.c_allocator.dupeZ(u8, text) catch @panic("out of memory");
         defer std.heap.c_allocator.free(terminated);
-        _ = c.SDL_SetClipboardText(terminated);
+        return c.SDL_SetClipboardText(terminated);
     }
 
     pub fn size(w: *Window) Extent {

@@ -21,7 +21,8 @@ const tree = @import("tree.zig");
 // waiting `next`, or else the next one that waits, return, and is called
 // from other threads; `input(area)` starts the typing of text at `area`, or
 // stops it when the area is null; `copy(text)` puts text into the clipboard
-// and `paste(allocator)` returns a copy of what it holds, or null.
+// and returns whether it took it, and `paste(allocator)` returns a copy of
+// what it holds, or null.
 pub fn Scene(comptime Impl: type, comptime Root: type) type {
     if (!node_zig.isComponent(Root)) @compileError("the root must be a component with a view");
     inline for (.{
@@ -76,8 +77,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             return Impl.paste(@ptrCast(@alignCast(impl)), into);
         }
 
-        fn copy(impl: *anyopaque, text: []const u8) void {
-            Impl.copy(@ptrCast(@alignCast(impl)), text);
+        fn copy(impl: *anyopaque, text: []const u8) bool {
+            return Impl.copy(@ptrCast(@alignCast(impl)), text);
         }
 
         pub fn run(s: *Self) !void {
