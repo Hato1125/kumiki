@@ -152,6 +152,8 @@ pub const Window = struct {
             c.SDL_EVENT_QUIT, c.SDL_EVENT_WINDOW_CLOSE_REQUESTED => .close,
             c.SDL_EVENT_MOUSE_MOTION => .{ .pointer_move = .{ .x = event.motion.x, .y = event.motion.y } },
             c.SDL_EVENT_WINDOW_MOUSE_LEAVE => .pointer_leave,
+            c.SDL_EVENT_WINDOW_FOCUS_GAINED => .{ .active = true },
+            c.SDL_EVENT_WINDOW_FOCUS_LOST => .{ .active = false },
             c.SDL_EVENT_MOUSE_BUTTON_DOWN, c.SDL_EVENT_MOUSE_BUTTON_UP => .{ .button = .{
                 .button = @enumFromInt(event.button.button),
                 .down = event.button.down,

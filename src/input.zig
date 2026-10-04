@@ -102,6 +102,8 @@ pub const Event = union(enum) {
     wheel: Wheel,
     key: KeyPress,
     text: TextInput,
+    // Whether the keyboard is with the window.
+    active: bool,
     close,
 };
 

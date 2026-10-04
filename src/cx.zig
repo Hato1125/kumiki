@@ -18,9 +18,10 @@ gpa: std.mem.Allocator,
 size: types.Extent,
 
 // The focus, the pointer and the pressed tap count when they are on this
-// component or inside it.
+// component or inside it. Nothing has the focus while the keyboard is with
+// another window.
 pub fn focused(cx: Context) bool {
-    return contains(cx.state.focus.slice(), cx.id);
+    return cx.state.active and contains(cx.state.focus.slice(), cx.id);
 }
 
 // A component shows its focus only after the keyboard was used, so that a

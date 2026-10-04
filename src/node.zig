@@ -42,7 +42,8 @@ pub fn contains(path: []const NodeId, id: NodeId) bool {
 // `stale` tell what the last build did: an animation still runs, something
 // was built again, a path may have changed because a list matched its rows
 // again or a `when` switched. `keyboard` is whether the last input came from
-// the keyboard. `tasks` lives on the heap, because functions in the
+// the keyboard, and `active` whether the keyboard is with the window of the
+// scene at all. `tasks` lives on the heap, because functions in the
 // background point at it while the scene may still be moved. `inputs` counts
 // the nodes that take typed text, and `typing` is where the implementation
 // was asked for it.
@@ -52,6 +53,7 @@ pub const State = struct {
     host: Host,
     inputs: u32 = 0,
     typing: ?types.Bounds = null,
+    active: bool = true,
     next_id: NodeId = 0,
     now: f64 = 0,
     animating: bool = false,

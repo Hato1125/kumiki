@@ -115,6 +115,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .text => |text| if (s.state.focus.id() != 0) {
                         _ = s.offer(s.state.focus.id(), .{ .text = text });
                     },
+                    .active => |active| s.activate(active),
                     .close => return false,
                 }
             }
@@ -174,7 +175,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         fn retype(s: *Self) void {
             var area: ?types.Bounds = null;
             const focus = s.state.focus.id();
-            if (focus != 0) _ = input.typingArea(&s.root, focus, &area);
+            if (s.state.active and focus != 0) _ = input.typingArea(&s.root, focus, &area);
             if (std.meta.eql(area, s.state.typing)) return;
             s.state.typing = area;
             s.impl.input(area);
@@ -208,6 +209,16 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             var path: Path = .{};
             if (at) |point| _ = input.hit(&s.root, point, &path);
             s.move(&s.state.hover, path);
+        }
+
+        // Without the keyboard nothing has the focus, so what shows the
+        // focus is built again, and a tap that is pressed is let go.
+        fn activate(s: *Self, active: bool) void {
+            if (active == s.state.active) return;
+            s.state.active = active;
+            tree.markChanged(&s.root, s.state.focus.slice(), &.{});
+            s.pending = true;
+            if (!active) s.move(&s.state.press, .{});
         }
 
         // A tap fires when the left button goes up over the tap it went down
