@@ -180,6 +180,16 @@ pub const Window = struct {
                 .x = event.wheel.x,
                 .y = event.wheel.y,
                 .at = .{ .x = event.wheel.mouse_x, .y = event.wheel.mouse_y },
+                .ticks_x = event.wheel.integer_x,
+                .ticks_y = event.wheel.integer_y,
+                .flipped = event.wheel.direction == c.SDL_MOUSEWHEEL_FLIPPED,
+                .mod = c.SDL_GetModState(),
+            } },
+            c.SDL_EVENT_DROP_FILE, c.SDL_EVENT_DROP_TEXT => .{ .drop = .{
+                .kind = if (event.type == c.SDL_EVENT_DROP_FILE) .file else .text,
+                .data = std.mem.span(event.drop.data),
+                .x = event.drop.x,
+                .y = event.drop.y,
             } },
             c.SDL_EVENT_TEXT_INPUT => .{ .text = .{
                 .text = std.mem.span(event.text.text),

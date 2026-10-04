@@ -1514,6 +1514,215 @@ test "a view that uses a press holds the pointer until the release, and is told 
     try expectEqualStrings("dc", trace);
 }
 
+const Menu = struct {
+    taps: u32 = 0,
+
+    pub const view = ui.column(.{
+        ui.rect().frame(.{ .width = 100, .height = 20 }).pointer(opened),
+        ui.rect().frame(.{ .width = 100, .height = 20 }).tap(tapped),
+    }).padding(20);
+
+    fn opened(pointer: ui.Pointer) bool {
+        if (pointer.button != .right) return false;
+        note(switch (pointer.phase) {
+            .down => 'd',
+            .move => 'm',
+            .up => 'u',
+            .cancel => 'c',
+        });
+        return true;
+    }
+
+    fn tapped(self: *Menu) void {
+        self.taps += 1;
+    }
+};
+
+fn buttonOf(s: anytype, which: ui.MouseButton, down: bool, at: ui.Point) void {
+    s.impl.push(.{ .button = .{ .button = which, .down = down, .x = at.x, .y = at.y } });
+}
+
+test "a view holds the pointer with the button it took, and the other buttons do nothing meanwhile" {
+    var s: Scene(Menu) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const over_view: ui.Point = .{ .x = 50, .y = 30 };
+    const over_tap: ui.Point = .{ .x = 50, .y = 50 };
+
+    // The view has no use for the left button, and holds nothing.
+    trace = "";
+    button(&s, true, over_view);
+    button(&s, false, over_view);
+    try frame(&s);
+    try expectEqualStrings("", trace);
+    try expectEqual(0, s.held);
+
+    buttonOf(&s, .right, true, over_view);
+    button(&s, true, over_tap);
+    button(&s, false, over_tap);
+    s.impl.push(.{ .pointer_move = over_view });
+    try frame(&s);
+    try expectEqualStrings("dm", trace);
+    try expectEqual(0, s.root.widget.taps);
+
+    buttonOf(&s, .right, false, over_view);
+    try frame(&s);
+    try expectEqualStrings("dmu", trace);
+    try expectEqual(0, s.held);
+
+    // The right button neither presses a tap nor moves the focus.
+    buttonOf(&s, .right, true, over_tap);
+    try frame(&s);
+    try expectEqual(0, s.state.press.id());
+    try expectEqual(0, s.state.focus.id());
+    buttonOf(&s, .right, false, over_tap);
+    try frame(&s);
+    try expectEqual(0, s.root.widget.taps);
+
+    // A tap that is pressed is let go when a view takes another button.
+    button(&s, true, over_tap);
+    try frame(&s);
+    try expect(s.state.press.id() != 0);
+    buttonOf(&s, .right, true, over_view);
+    button(&s, false, over_tap);
+    buttonOf(&s, .right, false, over_tap);
+    try frame(&s);
+    try expectEqual(0, s.state.press.id());
+    try expectEqual(0, s.root.widget.taps);
+}
+
+const Spot = struct {
+    x: f32 = 0,
+    y: f32 = 0,
+
+    pub const view = ui.rect().frame(.{ .width = 40, .height = 40 }).hover(watched);
+
+    fn watched(self: *Spot, hover: ui.Hover) void {
+        note(switch (hover.phase) {
+            .enter => 'e',
+            .move => 'm',
+            .leave => 'l',
+        });
+        self.x = hover.x;
+        self.y = hover.y;
+    }
+};
+
+const Lawn = struct {
+    shown: bool = true,
+
+    pub const view = ui.row(.{
+        ui.when(shows, Spot{}, ui.spacer()),
+        ui.rect().frame(.{ .width = 40, .height = 40 }),
+    }).padding(10).hover(around);
+
+    fn shows(self: *const Lawn) bool {
+        return self.shown;
+    }
+
+    fn around(hover: ui.Hover) void {
+        note(switch (hover.phase) {
+            .enter => 'E',
+            .move => 'M',
+            .leave => 'L',
+        });
+    }
+};
+
+test "the views under the pointer are told when it comes, moves and leaves" {
+    var s: Scene(Lawn) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const spot = &s.root.children[0].children[0].children[0].children[0].children[0];
+
+    // The position counts from the corner of the view.
+    trace = "";
+    s.impl.push(.{ .pointer_move = .{ .x = 20, .y = 30 } });
+    try frame(&s);
+    try expectEqualStrings("eE", trace);
+    try expectEqual(10, spot.widget.x);
+    try expectEqual(20, spot.widget.y);
+
+    s.impl.push(.{ .pointer_move = .{ .x = 25, .y = 30 } });
+    try frame(&s);
+    try expectEqualStrings("eEmM", trace);
+    try expectEqual(15, spot.widget.x);
+
+    // A press where the pointer already is moves nothing.
+    try click(&s, .{ .x = 25, .y = 30 });
+    try expectEqualStrings("eEmM", trace);
+
+    s.impl.push(.{ .pointer_move = .{ .x = 70, .y = 30 } });
+    try frame(&s);
+    try expectEqualStrings("eEmMlM", trace);
+    try expectEqual(60, spot.widget.x);
+
+    s.impl.push(.pointer_leave);
+    try frame(&s);
+    try expectEqualStrings("eEmMlML", trace);
+
+    // A view that is hidden under the pointer is told that the pointer
+    // left it.
+    trace = "";
+    s.impl.push(.{ .pointer_move = .{ .x = 20, .y = 30 } });
+    try frame(&s);
+    try expectEqualStrings("eE", trace);
+    s.root.widget.shown = false;
+    s.root.dirty = true;
+    s.pending = true;
+    try frame(&s);
+    try expectEqualStrings("eEl", trace);
+}
+
+const Tray = struct {
+    path: [32]u8 = undefined,
+    len: usize = 0,
+    x: f32 = 0,
+    texts: u32 = 0,
+
+    pub const view = ui.row(.{
+        ui.rect().frame(.{ .width = 40, .height = 40 }).drop(filed),
+        ui.rect().frame(.{ .width = 40, .height = 40 }),
+    }).padding(10).drop(texted);
+
+    fn filed(self: *Tray, drop: ui.Drop) bool {
+        if (drop.kind != .file) return false;
+        @memcpy(self.path[0..drop.data.len], drop.data);
+        self.len = drop.data.len;
+        self.x = drop.x;
+        return true;
+    }
+
+    fn texted(self: *Tray, drop: ui.Drop) bool {
+        if (drop.kind != .text) return false;
+        self.texts += 1;
+        return true;
+    }
+};
+
+test "a drop reaches the view under the pointer, and the views around it when it is not taken there" {
+    var s: Scene(Tray) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const tray = &s.root.widget;
+
+    s.impl.push(.{ .drop = .{ .kind = .file, .data = "/tmp/a.txt", .x = 30, .y = 20 } });
+    try frame(&s);
+    try expectEqualStrings("/tmp/a.txt", tray.path[0..tray.len]);
+    try expectEqual(20, tray.x);
+    try expectEqual(0, tray.texts);
+
+    s.impl.push(.{ .drop = .{ .kind = .text, .data = "a", .x = 30, .y = 20 } });
+    try frame(&s);
+    try expectEqual(1, tray.texts);
+
+    // Nothing takes a file beside the view.
+    tray.len = 0;
+    s.impl.push(.{ .drop = .{ .kind = .file, .data = "/tmp/b.txt", .x = 70, .y = 20 } });
+    try frame(&s);
+    try expectEqual(0, tray.len);
+}
+
 fn Stepper(comptime on_step: anytype) type {
     return struct {
         pub const view = ui.text("+").tap(step);

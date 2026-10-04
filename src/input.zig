@@ -8,6 +8,7 @@ const node_zig = @import("node.zig");
 const NodeId = node_zig.NodeId;
 const Path = node_zig.Path;
 const State = node_zig.State;
+const contains = node_zig.contains;
 const each = node_zig.each;
 const isFocusable = node_zig.isFocusable;
 const has = node_zig.has;
@@ -35,11 +36,18 @@ const ctrl_bits = 0x00c0;
 const alt_bits = 0x0300;
 const gui_bits = 0x0c00;
 
-/// What the left button does over a view with a `pointer` modifier. `x` and
-/// `y` count from the top left corner of that view. A hold ends with `up`, or
-/// with `cancel` when the window loses the keyboard meanwhile.
+/// What a mouse button does over a view with a `pointer` modifier. `button`
+/// is the one that was pressed, and the one that holds the pointer from then
+/// on. `x` and `y` count from the top left corner of that view. A hold ends
+/// with `up`, or with `cancel` when the window loses the keyboard meanwhile.
 pub const Pointer = struct {
-    phase: enum { down, move, up, cancel },
+    phase: enum {
+        down,
+        move,
+        up,
+        cancel,
+    },
+    button: MouseButton = .left,
     x: f32 = 0,
     y: f32 = 0,
     clicks: u8 = 1,
@@ -109,11 +117,48 @@ pub const TextInput = struct {
 
 /// How far the wheel turned while the pointer was at `at`. As SDL3 reports
 /// it, a positive `x` is to the right and a positive `y` is away from the
-/// user.
+/// user. `ticks_x` and `ticks_y` are the same turn in whole notches: a wheel
+/// that turns smoothly collects a notch before it reports one. `flipped`
+/// tells that the system turns the direction around, so that `x` and `y` are
+/// the opposite of how the wheel turned. `mod` holds the modifier keys held
+/// meanwhile.
 pub const Wheel = struct {
     x: f32 = 0,
     y: f32 = 0,
     at: Point = .{},
+    ticks_x: i32 = 0,
+    ticks_y: i32 = 0,
+    flipped: bool = false,
+    mod: u16 = 0,
+
+    pub fn shift(wheel: Wheel) bool {
+        return wheel.mod & shift_bits != 0;
+    }
+
+    pub fn ctrl(wheel: Wheel) bool {
+        return wheel.mod & ctrl_bits != 0;
+    }
+};
+
+/// What the pointer does over a view with a `hover` modifier while no view
+/// holds it: it comes over the view or something inside it, moves there, and
+/// leaves. `x` and `y` count from the top left corner of that view.
+pub const Hover = struct {
+    phase: enum { enter, move, leave },
+    x: f32 = 0,
+    y: f32 = 0,
+};
+
+/// A file or a text that was dragged from elsewhere and let go over a view
+/// with a `drop` modifier. `data` is the path of the file or the text itself:
+/// it is UTF-8 and only valid while the function it is given to runs. `x` and
+/// `y` count from the top left corner of that view. Files that are dropped
+/// together arrive one after the other.
+pub const Drop = struct {
+    kind: enum { file, text },
+    data: []const u8,
+    x: f32 = 0,
+    y: f32 = 0,
 };
 
 pub const Event = union(enum) {
@@ -121,6 +166,8 @@ pub const Event = union(enum) {
     pointer_leave,
     button: MouseButtonEvent,
     wheel: Wheel,
+    /// `x` and `y` count from the top left corner of the window here.
+    drop: Drop,
     key: KeyPress,
     text: TextInput,
     /// Whether the keyboard is with the window.
@@ -270,6 +317,7 @@ pub const Offer = union(enum) {
     key: KeyPress,
     text: TextInput,
     pointer: Pointer,
+    drop: Drop,
 };
 
 // Enter and Space activate a tap, except while text is typed: they belong to
@@ -279,7 +327,7 @@ fn activates(offer: Offer, state: *const State) bool {
         .click => true,
         .key => |press| state.typing == null and press.down and
             (press.key == keys.enter or press.key == keys.space),
-        .wheel, .text, .pointer => false,
+        .wheel, .text, .pointer, .drop => false,
     };
 }
 
@@ -311,6 +359,15 @@ fn handle(
             local.y -= origin.y;
             if (!invoke(f, owners, state, local)) return false;
         },
+        .drop => {
+            if (offer != .drop) return false;
+            const origin = offsetOf(node);
+            var local = offer.drop;
+            local.x -= origin.x;
+            local.y -= origin.y;
+            if (!invoke(f, owners, state, local)) return false;
+        },
+        .hover => return false,
     }
     markTargets(f, owners);
     return true;
@@ -332,6 +389,69 @@ pub fn bubble(
     }
     if (by.* == 0 and handle(node, offer, owners, state)) by.* = node.id;
     return true;
+}
+
+/// Whether a node of type `N`, or one inside it, has a `hover` modifier.
+pub fn watches(comptime N: type) bool {
+    return Watching(N).any;
+}
+
+// The answer is a declaration of its own for every type of node, because a
+// large tree would exceed the branch quota when counted in one evaluation.
+fn Watching(comptime N: type) type {
+    return struct {
+        const any = handles(@FieldType(N, "widget"), .hover) or inside: {
+            const Children = @FieldType(N, "children");
+            if (Children == void) break :inside false;
+            if (@hasField(Children, "items")) {
+                const Row = @typeInfo(@FieldType(Children, "items")).pointer.child;
+                break :inside Watching(Row).any;
+            }
+            for (@typeInfo(Children).@"struct".fields) |child| {
+                if (Watching(child.type).any) break :inside true;
+            }
+            break :inside false;
+        };
+    };
+}
+
+/// What the pointer did since the views with a `hover` modifier were told
+/// last: `was` and `is` are the paths it was over then and is over now.
+pub const Seen = struct {
+    was: []const NodeId,
+    is: []const NodeId,
+    moved: bool,
+    at: Point,
+};
+
+/// Tells the views with a `hover` modifier what `seen` means to them, the
+/// ones inside first. A view that a `when` hides is told that the pointer
+/// left it. Sets `told` when a view was told.
+pub fn watch(
+    node: anytype,
+    seen: Seen,
+    owners: anytype,
+    state: *const State,
+    told: *bool,
+) void {
+    if (comptime !watches(@TypeOf(node.*))) return;
+    const Widget = @TypeOf(node.widget);
+    const inner = if (comptime node_zig.isComponent(Widget)) owners ++ .{node} else owners;
+    _ = each(node, .all, watch, .{ seen, inner, state, told });
+    if (comptime !handles(Widget, .hover)) return;
+
+    const was = contains(seen.was, node.id);
+    const is = contains(seen.is, node.id);
+    if (was == is and !(is and seen.moved)) return;
+    const origin = offsetOf(node);
+    const hover: Hover = .{
+        .phase = if (!was) .enter else if (!is) .leave else .move,
+        .x = seen.at.x - origin.x,
+        .y = seen.at.y - origin.y,
+    };
+    _ = invoke(Widget.handler, owners, state, hover);
+    markTargets(Widget.handler, owners);
+    told.* = true;
 }
 
 /// Hands the result of a background function to the `receive` of the

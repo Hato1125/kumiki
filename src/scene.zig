@@ -45,10 +45,16 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         size: Extent = .{},
         pointer: ?Point = null,
         pending: bool = true,
-        /// The node that holds the pointer, and where the pointer was seen
-        /// last, which is kept while it is outside the window.
+        /// The node that holds the pointer and the button it holds it with,
+        /// and where the pointer was seen last, which is kept while it is
+        /// outside the window.
         held: NodeId = 0,
+        held_by: input.MouseButton = .left,
         last: Point = .{},
+        /// What the views that watch the pointer were told last: the path
+        /// it was over, and where it was.
+        told: Path = .{},
+        told_at: Point = .{},
         /// The node that takes the typed text.
         typing: NodeId = 0,
         /// When the last drawing asked for the next one.
@@ -142,6 +148,12 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                         s.hoverAt(wheel.at);
                         if (s.state.hover.id() != 0) {
                             _ = s.offer(s.state.hover.id(), .{ .wheel = wheel });
+                        }
+                    },
+                    .drop => |drop| {
+                        s.hoverAt(.{ .x = drop.x, .y = drop.y });
+                        if (s.state.hover.id() != 0) {
+                            _ = s.offer(s.state.hover.id(), .{ .drop = drop });
                         }
                     },
                     .key => |press| s.pressKey(press),
@@ -264,6 +276,28 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 _ = input.hit(&s.root, point, &path);
             }
             s.move(&s.state.hover, path);
+            s.watch();
+        }
+
+        // Tells the views with a `hover` modifier what the pointer did since
+        // they were told last. A path that went stale in between is told at
+        // the next hit.
+        fn watch(s: *Self) void {
+            if (comptime !input.watches(@TypeOf(s.root))) return;
+            const hover = &s.state.hover;
+            const moved = !std.meta.eql(s.last, s.told_at);
+            if (!moved and hover.id() == s.told.id()) return;
+
+            var told = false;
+            input.watch(&s.root, .{
+                .was = s.told.slice(),
+                .is = hover.slice(),
+                .moved = moved,
+                .at = s.last,
+            }, .{}, &s.state, &told);
+            s.told = hover.*;
+            s.told_at = s.last;
+            if (told) s.pending = true;
         }
 
         // Tells the view that holds the pointer what the pointer does.
@@ -271,6 +305,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             if (s.held == 0) return;
             _ = s.offer(s.held, .{ .pointer = .{
                 .phase = phase,
+                .button = s.held_by,
                 .x = s.last.x,
                 .y = s.last.y,
             } });
@@ -290,40 +325,51 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.move(&s.state.press, .{});
         }
 
-        // Pressing moves the focus to the nearest focusable node. The press
-        // is offered to the views that take the pointer, and one that uses
-        // it holds the pointer until the release. Otherwise a tap fires when
-        // the left button goes up over the tap it went down on.
+        // Pressing the left button moves the focus to the nearest focusable
+        // node. A press is offered to the views that take the pointer, and
+        // one that uses it holds the pointer until that button is released:
+        // the other buttons do nothing meanwhile, and a tap that was pressed
+        // is let go. Otherwise a tap fires when the left button goes up over
+        // the tap it went down on.
         fn pressButton(s: *Self, button: input.MouseButtonEvent) void {
             const state = &s.state;
             s.hoverAt(.{ .x = button.x, .y = button.y });
-            if (button.button != .left) return;
+            const left = button.button == .left;
 
             if (button.down) {
-                s.setKeyboard(false);
+                if (s.held != 0) return;
                 var found: input.Nearest = .{};
-                _ = input.nearest(&s.root, state.hover.id(), &found);
-                if (found.focusable != 0) {
-                    s.move(&state.focus, state.hover.from(found.focusable));
+                if (left) {
+                    s.setKeyboard(false);
+                    _ = input.nearest(&s.root, state.hover.id(), &found);
+                    if (found.focusable != 0) {
+                        s.move(&state.focus, state.hover.from(found.focusable));
+                    }
                 }
                 s.held = if (state.hover.id() == 0) 0 else s.offer(state.hover.id(), .{ .pointer = .{
                     .phase = .down,
+                    .button = button.button,
                     .x = button.x,
                     .y = button.y,
                     .clicks = button.clicks,
                     .mod = button.mod,
                 } });
-                if (s.held == 0) {
+                s.held_by = button.button;
+                if (s.held != 0) {
+                    s.move(&state.press, .{});
+                } else if (left) {
                     s.move(&state.press, state.hover.from(found.tap));
                 }
                 return;
             }
 
             if (s.held != 0) {
+                if (button.button != s.held_by) return;
                 s.hold(.up);
                 s.held = 0;
                 return;
             }
+            if (!left) return;
             const target = state.press.id();
             s.move(&state.press, .{});
             if (target != 0 and node_zig.contains(state.hover.slice(), target)) {

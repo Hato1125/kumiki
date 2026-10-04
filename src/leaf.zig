@@ -91,6 +91,8 @@ pub const Text = struct {
     pub const input = mod.input;
     pub const wheel = mod.wheel;
     pub const pointer = mod.pointer;
+    pub const hover = mod.hover;
+    pub const drop = mod.drop;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };
@@ -135,6 +137,8 @@ pub const Rect = struct {
     pub const input = mod.input;
     pub const wheel = mod.wheel;
     pub const pointer = mod.pointer;
+    pub const hover = mod.hover;
+    pub const drop = mod.drop;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };
@@ -204,6 +208,8 @@ pub const Picture = struct {
     pub const input = mod.input;
     pub const wheel = mod.wheel;
     pub const pointer = mod.pointer;
+    pub const hover = mod.hover;
+    pub const drop = mod.drop;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };

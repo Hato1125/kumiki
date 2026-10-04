@@ -20,6 +20,8 @@ pub fn Show(comptime f: anytype) type {
         pub const input = mod.input;
         pub const wheel = mod.wheel;
         pub const pointer = mod.pointer;
+        pub const hover = mod.hover;
+        pub const drop = mod.drop;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };

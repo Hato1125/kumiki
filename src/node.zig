@@ -91,7 +91,15 @@ pub fn isContainer(comptime T: type) bool {
     return @hasField(T, "children");
 }
 
-pub const HandlerKind = enum { tap, key, input, wheel, pointer };
+pub const HandlerKind = enum {
+    tap,
+    key,
+    input,
+    wheel,
+    pointer,
+    hover,
+    drop,
+};
 
 pub fn handles(comptime T: type, comptime kind: HandlerKind) bool {
     return @hasDecl(T, "handler_kind") and T.handler_kind == kind;

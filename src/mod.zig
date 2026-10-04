@@ -65,6 +65,8 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
         pub const input = mod.input;
         pub const wheel = mod.wheel;
         pub const pointer = mod.pointer;
+        pub const hover = mod.hover;
+        pub const drop = mod.drop;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };
@@ -313,16 +315,36 @@ pub fn wheel(
     return with(self, Handler(.wheel, handler){});
 }
 
-/// Offers what the left button does over the view to `handler`, in a
+/// Offers what the mouse buttons do over the view to `handler`, in a
 /// ui.Pointer parameter. When `handler` returns true for a press, the view
-/// holds the pointer: the moves and the release reach it wherever the pointer
-/// goes. While the pointer is held outside the view, the last move repeats on
+/// holds the pointer: the moves and the release of that button reach it
+/// wherever the pointer goes, and the other buttons do nothing meanwhile.
+/// While the pointer is held outside the view, the last move repeats on
 /// every frame, so that the view can scroll after it.
 pub fn pointer(
     self: anytype,
     comptime handler: anytype,
 ) Wrapped(@TypeOf(self), Handler(.pointer, handler)) {
     return with(self, Handler(.pointer, handler){});
+}
+
+/// Tells `handler`, in a ui.Hover parameter, when the pointer comes over the
+/// view, moves over it and leaves it. Every view under the pointer with this
+/// modifier is told, and what `handler` returns is not used.
+pub fn hover(
+    self: anytype,
+    comptime handler: anytype,
+) Wrapped(@TypeOf(self), Handler(.hover, handler)) {
+    return with(self, Handler(.hover, handler){});
+}
+
+/// Offers the files and the texts that are dropped on the view to `handler`,
+/// in a ui.Drop parameter. `handler` returns whether it took the drop.
+pub fn drop(
+    self: anytype,
+    comptime handler: anytype,
+) Wrapped(@TypeOf(self), Handler(.drop, handler)) {
+    return with(self, Handler(.drop, handler){});
 }
 
 /// Offers the text that is typed while the view, or something inside it, has
