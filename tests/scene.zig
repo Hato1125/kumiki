@@ -1254,6 +1254,31 @@ test "the position in a text nearest to a distance lies between two code points"
     try expectEqual(0, ui.text("").indexAt(10));
 }
 
+test "the characters that a font lacks are measured in its fallback, on the lines of the font" {
+    try ui.startup(options.font);
+    defer ui.shutdown();
+    try ui.addFont("assets/Roboto-Regular.ttf");
+
+    const latin = ui.text("ab").font("Roboto-Regular");
+    const japanese = ui.text("日本").font("NotoSansJP-Regular");
+    const mixed = ui.text("ab日本").font("Roboto-Regular").fallback("NotoSansJP-Regular");
+    try std.testing.expectApproxEqAbs(latin.advance() + japanese.advance(), mixed.advance(), 0.01);
+    try std.testing.expectApproxEqAbs(mixed.advance(), mixed.measure(.{}).width, 2);
+    try expectEqual(latin.measure(.{}).height, mixed.measure(.{}).height);
+    try expectEqual(latin.measure(.{}), latin.fallback("NotoSansJP-Regular").measure(.{}));
+
+    try expectEqual(2, mixed.indexAt(latin.advance() + japanese.advance() * 0.2));
+    try expectEqual(5, mixed.indexAt(latin.advance() + japanese.advance() * 0.4));
+
+    // The text wraps between the words and after any Japanese character.
+    const line = latin.measure(.{}).height;
+    const words = ui.text("ab ab 日本").font("Roboto-Regular").fallback("NotoSansJP-Regular");
+    const narrow: ui.Constraint = .{ .max = .{ .width = japanese.advance() * 0.75, .height = ui.inf } };
+    const wrapped = words.measure(narrow);
+    try expectEqual(4 * line, wrapped.height);
+    try expect(wrapped.width <= narrow.max.width);
+}
+
 const Dial = struct {
     turned: f32 = 0,
 

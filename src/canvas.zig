@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("c");
 
+const Coverage = @import("coverage.zig").Coverage;
 const types = @import("types.zig");
 const Bounds = types.Bounds;
 const Color = types.Color;
@@ -12,8 +13,19 @@ const points_per_pixel = 0.75;
 // From 0 to 100.
 const blur_quality = 100;
 
+const gpa = std.heap.c_allocator;
+
 var default_font_buffer: [256]u8 = undefined;
 var default_font: ?[:0]const u8 = null;
+
+const LoadedFont = struct {
+    name: []const u8,
+    path: [:0]const u8,
+    // Read from the file once the font is first given a fallback.
+    coverage: ?Coverage = null,
+};
+
+var loaded_fonts: std.ArrayList(LoadedFont) = .empty;
 
 // Loads `font` for the text that names no font. An implementation calls this
 // before it measures or draws, and `shutdown` at its end.
@@ -28,6 +40,11 @@ pub fn startup(font: ?[:0]const u8) !void {
 }
 
 pub fn shutdown() void {
+    for (loaded_fonts.items) |font| {
+        if (font.coverage) |coverage| coverage.deinit(gpa);
+        gpa.free(font.path);
+    }
+    loaded_fonts.clearAndFree(gpa);
     _ = c.tvg_engine_term();
 }
 
@@ -35,15 +52,60 @@ pub fn shutdown() void {
 // file name without its extension.
 pub fn addFont(path: [:0]const u8) !void {
     if (c.tvg_font_load(path) != c.TVG_RESULT_SUCCESS) return error.FontLoad;
+    const kept = try gpa.dupeZ(u8, path);
+    errdefer gpa.free(kept);
+    try loaded_fonts.append(gpa, .{ .name = std.fs.path.stem(kept), .path = kept });
+}
+
+fn readFile(path: [:0]const u8) ![]u8 {
+    const file = std.c.fopen(path, "rb") orelse return error.FileOpen;
+    defer _ = std.c.fclose(file);
+    var bytes: std.ArrayList(u8) = .empty;
+    errdefer bytes.deinit(gpa);
+    while (true) {
+        try bytes.ensureUnusedCapacity(gpa, 64 * 1024);
+        const space = bytes.unusedCapacitySlice();
+        const count = std.c.fread(space.ptr, 1, space.len, file);
+        if (count == 0) break;
+        bytes.items.len += count;
+    }
+    return bytes.toOwnedSlice(gpa);
+}
+
+fn readCoverage(path: [:0]const u8) !Coverage {
+    const file = try readFile(path);
+    defer gpa.free(file);
+    return Coverage.parse(gpa, file);
+}
+
+// A font that is not loaded, or whose file cannot be read, is taken to have
+// every glyph, so its text never falls back.
+fn coverageOf(name: []const u8) Coverage {
+    for (loaded_fonts.items) |*font| {
+        if (!std.mem.eql(u8, font.name, name)) continue;
+        if (font.coverage == null) font.coverage = readCoverage(font.path) catch .{};
+        return font.coverage.?;
+    }
+    return .{};
 }
 
 // Sizes are in pixels. A null `font` is the one given to startup, and a null
-// `line_height` is the font's own.
+// `line_height` is the font's own. `fallback` is the font for the characters
+// that the font has no glyph for. The lines and the baseline stay those of
+// the font.
 pub const TextStyle = struct {
     size: f32 = 16,
     font: ?[:0]const u8 = null,
+    fallback: ?[:0]const u8 = null,
     line_height: ?f32 = null,
     tracking: f32 = 0,
+
+    fn falling(style: TextStyle) TextStyle {
+        var other = style;
+        other.font = style.fallback;
+        other.fallback = null;
+        return other;
+    }
 };
 
 // The C API takes NUL-terminated strings, so text is copied here first.
@@ -69,10 +131,14 @@ fn inkWidth(text: c.Tvg_Paint) f32 {
     return if (std.math.isFinite(x + w)) x + w else 0;
 }
 
-fn lineAdvance(text: c.Tvg_Paint) f32 {
+fn metricsOf(text: c.Tvg_Paint) c.Tvg_Text_Metrics {
     var metrics: c.Tvg_Text_Metrics = .{};
     _ = c.tvg_text_get_text_metrics(text, &metrics);
-    return metrics.advance;
+    return metrics;
+}
+
+fn lineAdvance(text: c.Tvg_Paint) f32 {
+    return metricsOf(text).advance;
 }
 
 // A positive `width` wraps the text at that width. ThorVG only scales the
@@ -107,6 +173,18 @@ fn newText(s: []const u8, style: TextStyle, width: f32) c.Tvg_Paint {
 // A positive `width` wraps the text at that width. ThorVG reports stale
 // bounds for an empty string, so its width is not asked for.
 pub fn measureText(s: []const u8, style: TextStyle, width: f32) Extent {
+    if (Rulers.mixing(s, style)) |rulers| {
+        defer rulers.deinit();
+        var size: Extent = .{};
+        var lines: LineIterator = .{ .rest = s, .width = width, .rulers = &rulers };
+        while (lines.next()) |line| {
+            size.width = @max(size.width, rulers.lineWidth(line));
+            size.height += rulers.lineHeight();
+        }
+        if (width > 0) size.width = @min(size.width, width);
+        return size;
+    }
+
     const text = newText(s, style, width);
     defer _ = c.tvg_paint_rel(text);
 
@@ -147,15 +225,193 @@ const Ruler = struct {
         const count: f32 = @floatFromInt(std.unicode.utf8CountCodepoints(s) catch s.len);
         return inkWidth(ruler.text) - ruler.alone + ruler.tracking * count;
     }
+
+    // How far the ink of `s` reaches, which leaves out the spaces at its end.
+    fn ink(ruler: Ruler, s: []const u8) f32 {
+        if (s.len == 0) return 0;
+        _ = c.tvg_text_set_text(ruler.text, terminated(s, ""));
+        const natural = inkWidth(ruler.text);
+        if (natural == 0) return 0;
+        const count: f32 = @floatFromInt(std.unicode.utf8CountCodepoints(s) catch s.len);
+        return natural + ruler.tracking * count;
+    }
+};
+
+// The first code point of `s`, which is not empty, and its length in bytes.
+// A byte that starts no code point stands for itself.
+fn firstCodePoint(s: []const u8) struct { u21, usize } {
+    const length = std.unicode.utf8ByteSequenceLength(s[0]) catch return .{ s[0], 1 };
+    if (length > s.len) return .{ s[0], 1 };
+    return .{ std.unicode.utf8Decode(s[0..length]) catch return .{ s[0], 1 }, length };
+}
+
+// A stretch of text that one font draws.
+const Run = struct {
+    text: []const u8,
+    falls_back: bool,
+};
+
+const RunIterator = struct {
+    rest: []const u8,
+    coverage: Coverage,
+
+    fn next(runs: *RunIterator) ?Run {
+        if (runs.rest.len == 0) return null;
+        var end: usize = 0;
+        var falls_back = false;
+        while (end < runs.rest.len) {
+            const code_point, const length = firstCodePoint(runs.rest[end..]);
+            const lacking = !runs.coverage.has(code_point);
+            if (end == 0) falls_back = lacking;
+            if (lacking != falls_back) break;
+            end += length;
+        }
+        defer runs.rest = runs.rest[end..];
+        return .{ .text = runs.rest[0..end], .falls_back = falls_back };
+    }
+};
+
+// Measures texts in a style whose characters may fall back to a second font.
+const Rulers = struct {
+    main: Ruler,
+    fallback: ?Ruler = null,
+    // Of the main font.
+    coverage: Coverage = .{},
+    metrics: c.Tvg_Text_Metrics,
+    line_height: ?f32,
+
+    fn init(style: TextStyle) Rulers {
+        const main: Ruler = .init(style);
+        var rulers: Rulers = .{ .main = main, .metrics = metricsOf(main.text), .line_height = style.line_height };
+        const name = style.font orelse default_font orelse return rulers;
+        if (style.fallback == null) return rulers;
+        rulers.fallback = .init(style.falling());
+        rulers.coverage = coverageOf(name);
+        return rulers;
+    }
+
+    // The rulers of `style` when some of `s` falls back, and null when ThorVG
+    // can lay the whole text out in the one font.
+    fn mixing(s: []const u8, style: TextStyle) ?Rulers {
+        if (style.fallback == null) return null;
+        const rulers: Rulers = .init(style);
+        var parts = rulers.runs(s);
+        while (parts.next()) |run| if (run.falls_back) return rulers;
+        rulers.deinit();
+        return null;
+    }
+
+    fn deinit(rulers: Rulers) void {
+        rulers.main.deinit();
+        if (rulers.fallback) |ruler| ruler.deinit();
+    }
+
+    fn runs(rulers: Rulers, s: []const u8) RunIterator {
+        return .{ .rest = s, .coverage = rulers.coverage };
+    }
+
+    fn of(rulers: Rulers, run: Run) Ruler {
+        return if (run.falls_back) rulers.fallback.? else rulers.main;
+    }
+
+    fn lineHeight(rulers: Rulers) f32 {
+        return rulers.line_height orelse rulers.metrics.advance;
+    }
+
+    fn advance(rulers: Rulers, s: []const u8) f32 {
+        if (rulers.fallback == null) return rulers.main.advance(s);
+        var total: f32 = 0;
+        var parts = rulers.runs(s);
+        while (parts.next()) |run| total += rulers.of(run).advance(run.text);
+        return total;
+    }
+
+    // The width of a line up to the end of its ink.
+    fn lineWidth(rulers: Rulers, line: []const u8) f32 {
+        var before: f32 = 0;
+        var width: f32 = 0;
+        var parts = rulers.runs(line);
+        while (parts.next()) |run| {
+            const ink = rulers.of(run).ink(run.text);
+            if (ink > 0) width = before + ink;
+            before += rulers.of(run).advance(run.text);
+        }
+        return width;
+    }
+};
+
+// East Asian text has no spaces, so a line may end after any such character.
+fn breaksAnywhere(code_point: u21) bool {
+    return code_point >= 0x2e80;
+}
+
+// Cuts a text into lines. A positive `width` wraps the text at that width:
+// between words, and inside a word that is wider than a line of its own.
+const LineIterator = struct {
+    rest: []const u8,
+    width: f32,
+    rulers: *const Rulers,
+    // A line feed at the very end still opens a line.
+    pending: bool = true,
+
+    fn next(lines: *LineIterator) ?[]const u8 {
+        if (lines.rest.len == 0 and !lines.pending) return null;
+        lines.pending = false;
+
+        const limit = if (lines.width > 0) lines.width else std.math.inf(f32);
+        var end: usize = 0;
+        var x: f32 = 0;
+        while (end < lines.rest.len and lines.rest[end] != '\n') {
+            const word = nextWord(lines.rest[end..]);
+            const inked = std.mem.trimEnd(u8, word, " ");
+            if (x + lines.rulers.advance(inked) <= limit) {
+                end += word.len;
+                x += lines.rulers.advance(word);
+                continue;
+            }
+            if (end > 0) break;
+            while (end < word.len) {
+                const length = firstCodePoint(word[end..])[1];
+                const advance = lines.rulers.advance(word[end..][0..length]);
+                if (end > 0 and x + advance > limit) break;
+                end += length;
+                x += advance;
+            }
+            break;
+        }
+
+        const line = lines.rest[0..end];
+        lines.rest = lines.rest[end..];
+        if (lines.rest.len > 0 and lines.rest[0] == '\n') {
+            lines.rest = lines.rest[1..];
+            lines.pending = true;
+        }
+        return line;
+    }
+
+    // The start of `s` up to where a line may end next: a word with the
+    // spaces after it, or one East Asian character.
+    fn nextWord(s: []const u8) []const u8 {
+        var end: usize = 0;
+        var spaces = false;
+        while (end < s.len) {
+            const code_point, const length = firstCodePoint(s[end..]);
+            if (code_point == '\n') break;
+            if (breaksAnywhere(code_point)) return s[0..if (end == 0) length else end];
+            if (code_point == ' ') spaces = true else if (spaces) break;
+            end += length;
+        }
+        return s[0..end];
+    }
 };
 
 // The distance from the start of `s` to where a character after it would go.
 // Unlike the width that measureText gives, it counts the spaces at the end.
 pub fn textAdvance(s: []const u8, style: TextStyle) f32 {
     if (s.len == 0) return 0;
-    const ruler: Ruler = .init(style);
-    defer ruler.deinit();
-    return ruler.advance(s);
+    const rulers: Rulers = .init(style);
+    defer rulers.deinit();
+    return rulers.advance(s);
 }
 
 fn isContinuation(byte: u8) bool {
@@ -166,8 +422,8 @@ fn isContinuation(byte: u8) bool {
 // two code points. The text is halved until two neighbors are left, since
 // ThorVG only tells how wide a whole text is.
 pub fn textIndexAt(s: []const u8, style: TextStyle, x: f32) usize {
-    const ruler: Ruler = .init(style);
-    defer ruler.deinit();
+    const rulers: Rulers = .init(style);
+    defer rulers.deinit();
 
     var low: usize = 0;
     var low_x: f32 = 0;
@@ -180,7 +436,7 @@ pub fn textIndexAt(s: []const u8, style: TextStyle, x: f32) usize {
             while (middle < high and isContinuation(s[middle])) middle += 1;
         }
         if (middle >= high) break;
-        const middle_x = ruler.advance(s[0..middle]);
+        const middle_x = rulers.advance(s[0..middle]);
         if (middle_x <= x) {
             low = middle;
             low_x = middle_x;
@@ -188,7 +444,7 @@ pub fn textIndexAt(s: []const u8, style: TextStyle, x: f32) usize {
             high = middle;
         }
     }
-    return if (x - low_x <= ruler.advance(s[0..high]) - x) low else high;
+    return if (x - low_x <= rulers.advance(s[0..high]) - x) low else high;
 }
 
 // A PNG or JPG file that is read once and drawn as often as needed. It lives
@@ -376,11 +632,50 @@ pub const Canvas = struct {
     // a line taller or shorter than the font's own.
     pub fn text(canvas: *Canvas, x: f32, y: f32, width: f32, s: []const u8, style: TextStyle, color: Color) void {
         if (s.len == 0 or color.a == 0) return;
+        if (Rulers.mixing(s, style)) |rulers| {
+            defer rulers.deinit();
+            canvas.mixedText(x, y, width, s, style, color, &rulers);
+            return;
+        }
         const paint = newText(s, style, width);
         const lead = if (style.line_height) |height| (height - lineAdvance(paint)) / 2 else 0;
+        canvas.addText(paint, x, y + lead, color);
+    }
+
+    // Draws every run of every line as a text of its own, with the fallback
+    // font on the baseline of the main one.
+    fn mixedText(
+        canvas: *Canvas,
+        x: f32,
+        y: f32,
+        width: f32,
+        s: []const u8,
+        style: TextStyle,
+        color: Color,
+        rulers: *const Rulers,
+    ) void {
+        var main = style;
+        main.line_height = null;
+        const fallback = main.falling();
+
+        var top = y + (rulers.lineHeight() - rulers.metrics.advance) / 2;
+        var lines: LineIterator = .{ .rest = s, .width = width, .rulers = rulers };
+        while (lines.next()) |line| : (top += rulers.lineHeight()) {
+            var left = x;
+            var runs = rulers.runs(line);
+            while (runs.next()) |run| {
+                const paint = newText(run.text, if (run.falls_back) fallback else main, 0);
+                const raise = rulers.metrics.ascent - metricsOf(paint).ascent;
+                canvas.addText(paint, left, top + raise, color);
+                left += rulers.of(run).advance(run.text);
+            }
+        }
+    }
+
+    fn addText(canvas: *Canvas, paint: c.Tvg_Paint, x: f32, y: f32, color: Color) void {
         _ = c.tvg_text_set_color(paint, color.r, color.g, color.b);
         _ = c.tvg_paint_set_opacity(paint, color.a);
-        _ = c.tvg_paint_translate(paint, x * canvas.scale, (y + lead) * canvas.scale);
+        _ = c.tvg_paint_translate(paint, x * canvas.scale, y * canvas.scale);
         _ = c.tvg_paint_scale(paint, canvas.scale);
         canvas.add(paint);
     }

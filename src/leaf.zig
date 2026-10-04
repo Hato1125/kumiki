@@ -13,6 +13,7 @@ pub const Text = struct {
     font_size: f32 = 16,
     text_color: Color = .black,
     font_name: ?[:0]const u8 = null,
+    fallback_name: ?[:0]const u8 = null,
     line_height: ?f32 = null,
     letter_spacing: f32 = 0,
 
@@ -29,6 +30,11 @@ pub const Text = struct {
         return mod.set(text, "font_name", name);
     }
 
+    // The font for the characters that the font has no glyph for.
+    pub fn fallback(text: Text, name: [:0]const u8) Text {
+        return mod.set(text, "fallback_name", name);
+    }
+
     pub fn lineHeight(text: Text, px: f32) Text {
         return mod.set(text, "line_height", px);
     }
@@ -41,6 +47,7 @@ pub const Text = struct {
         return .{
             .size = text.font_size,
             .font = text.font_name,
+            .fallback = text.fallback_name,
             .line_height = text.line_height,
             .tracking = text.letter_spacing,
         };
