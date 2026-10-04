@@ -393,26 +393,11 @@ pub fn bubble(
 
 /// Whether a node of type `N`, or one inside it, has a `hover` modifier.
 pub fn watches(comptime N: type) bool {
-    return Watching(N).any;
+    return node_zig.holds(N, isHover);
 }
 
-// The answer is a declaration of its own for every type of node, because a
-// large tree would exceed the branch quota when counted in one evaluation.
-fn Watching(comptime N: type) type {
-    return struct {
-        const any = handles(@FieldType(N, "widget"), .hover) or inside: {
-            const Children = @FieldType(N, "children");
-            if (Children == void) break :inside false;
-            if (@hasField(Children, "items")) {
-                const Row = @typeInfo(@FieldType(Children, "items")).pointer.child;
-                break :inside Watching(Row).any;
-            }
-            for (@typeInfo(Children).@"struct".fields) |child| {
-                if (Watching(child.type).any) break :inside true;
-            }
-            break :inside false;
-        };
-    };
+fn isHover(comptime Widget: type) bool {
+    return handles(Widget, .hover);
 }
 
 /// What the pointer did since the views with a `hover` modifier were told

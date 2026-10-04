@@ -850,6 +850,28 @@ pub const Canvas = struct {
         canvas.add(layer);
     }
 
+    /// Shows the layer at `scale` times its size around `origin`, which stays
+    /// where it is, and at `opacity` from 0 to 1.
+    pub fn popScaled(canvas: *Canvas, origin: types.Point, scale: f32, opacity: f32) void {
+        canvas.depth -= 1;
+        const layer = canvas.layers[canvas.depth];
+        const matrix: c.Tvg_Matrix = .{
+            .e11 = scale,
+            .e12 = 0,
+            .e13 = origin.x * canvas.scale * (1 - scale),
+            .e21 = 0,
+            .e22 = scale,
+            .e23 = origin.y * canvas.scale * (1 - scale),
+            .e31 = 0,
+            .e32 = 0,
+            .e33 = 1,
+        };
+        _ = c.tvg_paint_set_transform(layer, &matrix);
+        const alpha = std.math.clamp(opacity, 0, 1) * 255;
+        if (alpha < 255) _ = c.tvg_paint_set_opacity(layer, @intFromFloat(@round(alpha)));
+        canvas.add(layer);
+    }
+
     /// `sigma` is the standard deviation of the Gaussian. The layer itself is
     /// not scaled, so ThorVG takes it in pixels.
     pub fn popBlurred(canvas: *Canvas, sigma: f32) void {

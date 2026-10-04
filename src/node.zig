@@ -109,6 +109,36 @@ pub fn isFocusable(comptime T: type) bool {
     return handles(T, .tap) or handles(T, .key) or handles(T, .input);
 }
 
+/// A popup is a container of a view and of what it shows in front of
+/// everything else while it is open.
+pub fn isPopup(comptime T: type) bool {
+    return has(T, "dismiss");
+}
+
+/// Whether the widget of a node of type `N`, or of one inside it, matches.
+pub fn holds(comptime N: type, comptime matches: fn (comptime type) bool) bool {
+    return Holding(N, matches).any;
+}
+
+// The answer is a declaration of its own for every type of node, because a
+// large tree would exceed the branch quota when counted in one evaluation.
+fn Holding(comptime N: type, comptime matches: fn (comptime type) bool) type {
+    return struct {
+        const any = matches(@FieldType(N, "widget")) or inside: {
+            const Inside = @FieldType(N, "children");
+            if (Inside == void) break :inside false;
+            if (@hasField(Inside, "items")) {
+                const Row = @typeInfo(@FieldType(Inside, "items")).pointer.child;
+                break :inside Holding(Row, matches).any;
+            }
+            for (@typeInfo(Inside).@"struct".fields) |child| {
+                if (Holding(child.type, matches).any) break :inside true;
+            }
+            break :inside false;
+        };
+    };
+}
+
 /// Whether a widget takes part in a pass through its declaration `name`. A
 /// component is walked as the container of its view, whatever it declares.
 pub fn has(comptime T: type, comptime name: []const u8) bool {
@@ -184,8 +214,9 @@ fn Children(comptime View: type) type {
 pub const Order = enum { all, shown, front };
 
 /// Calls `f(child, args...)` for the children of `node` until a call returns
-/// true. `shown` leaves out the side of a `when` that is not on display, and
-/// `front` also starts from the child in front.
+/// true. `shown` leaves out what a config with a `cond` does not show, such as
+/// the other side of a `when`, and `front` also starts from the child in
+/// front.
 pub fn each(
     node: anytype,
     comptime order: Order,
@@ -206,7 +237,7 @@ pub fn each(
     const partly = comptime order != .all and has(@TypeOf(node.widget), "cond");
     inline for (0..children.len) |n| {
         const i = if (order == .front) children.len - 1 - n else n;
-        if (!partly or (i == 0) == node.widget.active) {
+        if (!partly or node.widget.shows(i)) {
             if (stops(@call(.auto, f, .{&children[i]} ++ args))) return true;
         }
     }

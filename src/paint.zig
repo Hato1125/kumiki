@@ -28,7 +28,8 @@ pub const Painter = struct {
 };
 
 /// Draws a widget in `paint`, and around its children in `beginPaint` and
-/// `endPaint`.
+/// `endPaint`. What a popup shows is left to `popup.paint`, which draws it
+/// after everything else.
 pub fn paint(node: anytype, canvas: *Canvas) void {
     const Widget = @TypeOf(node.widget);
     const at = node_zig.offsetOf(node);
@@ -40,6 +41,10 @@ pub fn paint(node: anytype, canvas: *Canvas) void {
     } };
     if (comptime has(Widget, "paint")) node.widget.paint(p);
     if (comptime has(Widget, "beginPaint")) node.widget.beginPaint(p);
-    _ = node_zig.each(node, .shown, paint, .{canvas});
+    if (comptime node_zig.isPopup(Widget)) {
+        paint(&node.children[0], canvas);
+    } else {
+        _ = node_zig.each(node, .shown, paint, .{canvas});
+    }
     if (comptime has(Widget, "endPaint")) node.widget.endPaint(p);
 }

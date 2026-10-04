@@ -157,6 +157,13 @@ fn apply(
         if (comptime @hasDecl(@TypeOf(value.config), "cond")) {
             const active = invoke(@TypeOf(value.config).cond, owners, state, {});
             if (active != node.widget.active) state.stale = true;
+            if (origin == .function) {
+                if (comptime @hasDecl(@TypeOf(value.config), "adopt")) {
+                    node.widget.adopt(value.config);
+                } else {
+                    node.widget = value.config;
+                }
+            }
             node.widget.active = active;
         } else if (origin == .function) {
             node.widget = value.config;

@@ -13,6 +13,7 @@ const pass = @import("layout.zig");
 const HandlerKind = @import("node.zig").HandlerKind;
 const Resolved = @import("node.zig").Resolved;
 const Painter = @import("paint.zig").Painter;
+const popup_zig = @import("popup.zig");
 const Alignment = @import("stack.zig").Alignment;
 
 const mod = @This();
@@ -67,6 +68,7 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
         pub const pointer = mod.pointer;
         pub const hover = mod.hover;
         pub const drop = mod.drop;
+        pub const popup = mod.popup;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };
@@ -354,6 +356,38 @@ pub fn input(
     comptime handler: anytype,
 ) Wrapped(@TypeOf(self), Handler(.input, handler)) {
     return with(self, Handler(.input, handler){});
+}
+
+fn Popped(
+    comptime Self: type,
+    comptime cond: anytype,
+    comptime dismiss: anytype,
+    comptime Content: type,
+) type {
+    return Container(struct { Base(Self), Content }, popup_zig.Popup(cond, dismiss));
+}
+
+/// Shows `content` in front of everything else while `cond` returns true,
+/// placed against the view as `placement` says and kept inside the window.
+/// It comes and goes as `transition` says.
+/// While a popup is open, the pointer reaches the popups only, Tab and the up
+/// and down keys move the focus inside the one in front, and a press outside
+/// the popups or an Escape that nothing used runs `dismiss`, which is the one
+/// to make `cond` false. A press of the left button does nothing else, and
+/// one of another button then reaches what lies under it. The parameters of
+/// both are filled in by type.
+pub fn popup(
+    self: anytype,
+    comptime cond: anytype,
+    comptime dismiss: anytype,
+    content: anytype,
+    placement: popup_zig.Placement,
+    transition: popup_zig.Transition,
+) Popped(@TypeOf(self), cond, dismiss, @TypeOf(content)) {
+    return .{
+        .children = .{ base(self), content },
+        .config = .{ .placement = placement, .transition = transition },
+    };
 }
 
 fn Animated(comptime Child: type) type {

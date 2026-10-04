@@ -22,6 +22,7 @@ pub fn Show(comptime f: anytype) type {
         pub const pointer = mod.pointer;
         pub const hover = mod.hover;
         pub const drop = mod.drop;
+        pub const popup = mod.popup;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };
@@ -44,6 +45,10 @@ pub fn When(comptime cond_fn: anytype) type {
         const Self = @This();
 
         pub const cond = cond_fn;
+
+        pub fn shows(w: Self, comptime child: usize) bool {
+            return (child == 0) == w.active;
+        }
 
         pub fn measureAll(w: Self, children: anytype, c: Constraint) Extent {
             return if (w.active) pass.measure(&children[0], c) else pass.measure(&children[1], c);

@@ -10,6 +10,7 @@ const node_zig = @import("node.zig");
 const NodeId = node_zig.NodeId;
 const Path = node_zig.Path;
 const paint = @import("paint.zig").paint;
+const popup = @import("popup.zig");
 const Tasks = @import("task.zig").Tasks;
 const tree = @import("tree.zig");
 
@@ -174,6 +175,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 canvas.now = s.state.now;
                 canvas.again = s.again;
                 paint(&s.root, canvas);
+                popup.paint(&s.root, canvas);
                 s.again = canvas.again;
                 try s.impl.end();
             }
@@ -195,7 +197,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         }
 
         // A path that went stale is found again, and dropped when its node
-        // is gone or no longer shown. A new layout may have moved something
+        // is gone or no longer shown. The focus that was in a popup goes back
+        // to the view of the popup when that closes. A new layout may have moved something
         // under a still pointer.
         fn update(s: *Self) void {
             const state = &s.state;
@@ -205,9 +208,17 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             state.built = false;
             state.stale = false;
             tree.rebuild(&s.root, state, .{});
+            popup.advance(&s.root, state);
 
             if (state.stale) {
-                inline for (.{ &state.focus, &state.hover, &state.press }) |path| {
+                var focus = s.pathTo(state.focus.id());
+                if (focus.id() == 0) {
+                    var anchor: NodeId = 0;
+                    _ = popup.anchorOf(&s.root, state.focus.slice(), &anchor);
+                    focus = s.pathTo(anchor);
+                }
+                s.move(&state.focus, focus);
+                inline for (.{ &state.hover, &state.press }) |path| {
                     s.move(path, s.pathTo(path.id()));
                 }
                 if (s.pathTo(s.held).id() == 0) s.held = 0;
@@ -216,6 +227,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 s.size = size;
                 _ = pass.measure(&s.root, .tight(size));
                 pass.layout(&s.root, .{});
+                popup.place(&s.root, size);
                 if (s.pointer) |at| s.hoverAt(at);
             }
             if (state.inputs != 0 or s.typing != 0) s.retype();
@@ -268,12 +280,17 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.pending = true;
         }
 
+        // While a popup is open, the pointer is over what the popups show
+        // or over nothing.
         fn hoverAt(s: *Self, at: ?Point) void {
             s.pointer = at;
             var path: Path = .{};
             if (at) |point| {
                 s.last = point;
-                _ = input.hit(&s.root, point, &path);
+                var open = false;
+                if (!popup.hit(&s.root, point, &path, &open) and !open) {
+                    _ = input.hit(&s.root, point, &path);
+                }
             }
             s.move(&s.state.hover, path);
             s.watch();
@@ -298,6 +315,14 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.told = hover.*;
             s.told_at = s.last;
             if (told) s.pending = true;
+        }
+
+        // Returns whether a popup was open to be dismissed.
+        fn dismiss(s: *Self) bool {
+            var told = false;
+            popup.dismiss(&s.root, .{}, &s.state, &told);
+            if (told) s.pending = true;
+            return told;
         }
 
         // Tells the view that holds the pointer what the pointer does.
@@ -325,8 +350,12 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.move(&s.state.press, .{});
         }
 
-        // Pressing the left button moves the focus to the nearest focusable
-        // node. A press is offered to the views that take the pointer, and
+        // A press outside the open popups dismisses them. The left button
+        // does nothing else then, so that the view of a popup does not open
+        // it again, while another button goes on to what lies there once the
+        // popups are gone, so that a menu can open again where it is asked
+        // for. Pressing the left button moves the focus to the nearest
+        // focusable node. A press is offered to the views that take the pointer, and
         // one that uses it holds the pointer until that button is released:
         // the other buttons do nothing meanwhile, and a tap that was pressed
         // is let go. Otherwise a tap fires when the left button goes up over
@@ -338,6 +367,11 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
 
             if (button.down) {
                 if (s.held != 0) return;
+                if (state.hover.id() == 0 and s.dismiss()) {
+                    if (left) return;
+                    s.update();
+                    s.hoverAt(.{ .x = button.x, .y = button.y });
+                }
                 var found: input.Nearest = .{};
                 if (left) {
                     s.setKeyboard(false);
@@ -377,8 +411,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             }
         }
 
-        // Keys go to the focus first. Tab and Escape move it when nothing
-        // used them.
+        // Keys go to the focus first. When nothing used them, Tab moves the
+        // focus and Escape drops it. While a popup is open, the focus moves
+        // inside the one in front, with the up and down keys too, and Escape
+        // dismisses the popups instead.
         fn pressKey(s: *Self, press: input.KeyPress) void {
             const state = &s.state;
             if (press.down and !press.isModifier()) s.setKeyboard(true);
@@ -387,13 +423,19 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             }
             if (!press.down) return;
 
-            if (press.key == keys.tab) {
-                var walk: input.FocusWalk = .{ .current = state.focus.id() };
-                input.walkFocus(&s.root, &walk);
-                s.move(&state.focus, s.pathTo(walk.result(press.shift())));
-            } else if (press.key == keys.escape) {
-                s.move(&state.focus, .{});
+            if (press.key == keys.escape) {
+                if (!s.dismiss()) s.move(&state.focus, .{});
+                return;
             }
+            const tab = press.key == keys.tab;
+            const arrow = press.key == keys.up or press.key == keys.down;
+            if (!tab and !arrow) return;
+            var walk: input.FocusWalk = .{ .current = state.focus.id() };
+            const inside = popup.walkFocus(&s.root, &walk);
+            if (!inside and !tab) return;
+            if (!inside) input.walkFocus(&s.root, &walk);
+            const backward = if (tab) press.shift() else press.key == keys.up;
+            s.move(&state.focus, s.pathTo(walk.result(backward)));
         }
 
         // Returns the node that handled it, or 0.

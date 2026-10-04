@@ -93,6 +93,7 @@ pub const Text = struct {
     pub const pointer = mod.pointer;
     pub const hover = mod.hover;
     pub const drop = mod.drop;
+    pub const popup = mod.popup;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };
@@ -139,6 +140,7 @@ pub const Rect = struct {
     pub const pointer = mod.pointer;
     pub const hover = mod.hover;
     pub const drop = mod.drop;
+    pub const popup = mod.popup;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };
@@ -210,6 +212,7 @@ pub const Picture = struct {
     pub const pointer = mod.pointer;
     pub const hover = mod.hover;
     pub const drop = mod.drop;
+    pub const popup = mod.popup;
     pub const animation = mod.animation;
     pub const with = mod.with;
 };

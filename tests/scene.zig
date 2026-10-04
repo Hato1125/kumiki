@@ -1869,3 +1869,264 @@ test "a color does not overshoot" {
     try std.testing.expectEqual(to, ui.Color.lerp(from, to, 1.2));
     try std.testing.expectEqual(from, ui.Color.lerp(from, to, -0.2));
 }
+
+// A view that opens two choices in a popup, above a tap that the popup
+// covers.
+const Chooser = struct {
+    open: bool = false,
+    chosen: u8 = 0,
+    others: u32 = 0,
+
+    const side = 40;
+
+    pub const view = ui.column(.{
+        ui.rect().frame(.{ .width = 100, .height = side }).tap(toggle).popup(isOpen, close, ui.column(.{
+            ui.rect().frame(.{ .width = 100, .height = side }).tap(first),
+            ui.rect().frame(.{ .width = 100, .height = side }).tap(second),
+        }), .{}, .{}),
+        ui.rect().frame(.{ .width = 300, .height = side }).tap(other),
+    }).cross(.start);
+
+    fn isOpen(self: *const Chooser) bool {
+        return self.open;
+    }
+
+    fn toggle(self: *Chooser) void {
+        self.open = !self.open;
+    }
+
+    fn close(self: *Chooser) void {
+        self.open = false;
+    }
+
+    fn first(self: *Chooser) void {
+        self.chosen = 1;
+    }
+
+    fn second(self: *Chooser) void {
+        self.chosen = 2;
+    }
+
+    fn other(self: *Chooser) void {
+        self.others += 1;
+    }
+};
+
+const over_opener: ui.Point = .{ .x = 50, .y = 20 };
+const over_first: ui.Point = .{ .x = 50, .y = 60 };
+const beside_popup: ui.Point = .{ .x = 200, .y = 60 };
+
+test "a popup shows below its view, in front of what lies there" {
+    var s: Scene(Chooser) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const column = &s.root.children[0];
+    const opener = &column.children[0];
+    try expectEqual(ui.Extent{ .width = 100, .height = 40 }, opener.size);
+
+    // While closed, the place below the view belongs to what lies there.
+    try click(&s, over_first);
+    try expectEqual(0, s.root.widget.chosen);
+    try expectEqual(1, s.root.widget.others);
+
+    try click(&s, over_opener);
+    try frame(&s);
+    try expect(s.root.widget.open);
+    const content = &opener.children[1];
+    try expectEqual(ui.Point{ .x = 0, .y = 40 }, ui.offsetOf(content));
+    try expectEqual(ui.Extent{ .width = 100, .height = 80 }, content.size);
+    // The popup takes no room: what follows the view stays where it was.
+    try expectEqual(ui.Point{ .x = 0, .y = 40 }, ui.offsetOf(&column.children[1]));
+
+    try click(&s, over_first);
+    try expectEqual(1, s.root.widget.chosen);
+    try expectEqual(1, s.root.widget.others);
+}
+
+test "a press outside the open popups dismisses them and does nothing else" {
+    var s: Scene(Chooser) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+
+    try click(&s, over_opener);
+    try frame(&s);
+    try click(&s, beside_popup);
+    try expect(!s.root.widget.open);
+    try expectEqual(0, s.root.widget.others);
+
+    // The view of the popup is outside it too, so a press there closes the
+    // popup instead of opening it again.
+    try click(&s, over_opener);
+    try frame(&s);
+    try click(&s, over_opener);
+    try expect(!s.root.widget.open);
+
+    try frame(&s);
+    try click(&s, beside_popup);
+    try expectEqual(1, s.root.widget.others);
+}
+
+test "while a popup is open, the focus moves inside it, and Escape dismisses it" {
+    var s: Scene(Chooser) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const opener = &s.root.children[0].children[0];
+    const choices = &opener.children[1].children;
+
+    // Without a popup the arrows move nothing.
+    try press(&s, ui.keys.down, 0);
+    try expectEqual(0, s.state.focus.id());
+
+    try click(&s, over_opener);
+    try frame(&s);
+    try press(&s, ui.keys.down, 0);
+    try expectEqual(choices[0].id, s.state.focus.id());
+    try press(&s, ui.keys.down, 0);
+    try expectEqual(choices[1].id, s.state.focus.id());
+    try press(&s, ui.keys.tab, 0);
+    try expectEqual(choices[0].id, s.state.focus.id());
+    try press(&s, ui.keys.up, 0);
+    try expectEqual(choices[1].id, s.state.focus.id());
+
+    try press(&s, ui.keys.enter, 0);
+    try expectEqual(2, s.root.widget.chosen);
+
+    // The focus goes back to the view of the popup.
+    try press(&s, ui.keys.escape, 0);
+    try expect(!s.root.widget.open);
+    try frame(&s);
+    try expectEqual(opener.children[0].id, s.state.focus.id());
+}
+
+// A popup at the bottom right corner of a window that has no room below or
+// beside it, and comes over a quarter of a second.
+const Cornered = struct {
+    open: bool = true,
+
+    pub const view = ui.rect().frame(.{ .width = 40, .height = 40 })
+        .popup(isOpen, close, ui.rect().frame(.{ .width = 120, .height = 90 }), .{ .offset = .{ .y = 4 } }, .{
+            .scale = 0.5,
+            .grow = .{ .duration = 0.25, .curve = .linear },
+            .fade = .{ .duration = 0.25, .curve = .linear },
+        })
+        .frame(.{ .max_width = ui.inf, .max_height = ui.inf, .alignment = .bottom_right });
+
+    fn isOpen(self: *const Cornered) bool {
+        return self.open;
+    }
+
+    fn close(self: *Cornered) void {
+        self.open = false;
+    }
+};
+
+test "a popup without room on its side of the view opens on the opposite side" {
+    var s: Scene(Cornered) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const anchored = &s.root.children[0].children[0];
+    try expectEqual(ui.Point{ .x = 360, .y = 260 }, ui.offsetOf(anchored));
+    // Its right edge is on that of the view, and its bottom 4 above the view.
+    try expectEqual(ui.Point{ .x = 280, .y = 166 }, ui.offsetOf(&anchored.children[1]));
+    try expectEqual(ui.Alignment.bottom_right, anchored.widget.origin);
+}
+
+test "a popup comes and goes over time, and takes no input while it goes" {
+    var s: Scene(Cornered) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const popup = &s.root.children[0].children[0].widget;
+    try expect(popup.visible);
+    try expect(s.busy());
+    s.impl.seconds = 0.3;
+    try frame(&s);
+    try expect(!s.busy());
+
+    try press(&s, ui.keys.escape, 0);
+    try frame(&s);
+    try expect(!s.root.widget.open);
+    try expect(popup.visible);
+    try expectEqual(0, s.state.hover.id());
+    s.impl.push(.{ .pointer_move = .{ .x = 300, .y = 200 } });
+    s.impl.seconds = 0.4;
+    try frame(&s);
+    try expect(popup.visible);
+    try expect(s.state.hover.id() != 0);
+    try expect(!node_contains(s.state.hover.slice(), s.root.children[0].children[0].children[1].id));
+
+    s.impl.seconds = 0.6;
+    try frame(&s);
+    try expect(!popup.visible);
+    try expect(!s.busy());
+}
+
+fn node_contains(path: anytype, id: u32) bool {
+    return std.mem.indexOfScalar(u32, path, id) != null;
+}
+
+// An area that opens a popup where the right button is pressed.
+const Easel = struct {
+    open: bool = false,
+    at: ui.Point = .{},
+
+    pub const view = ui.stack(.{
+        ui.rect().frame(.{ .width = 400, .height = 300 }).pointer(pressed),
+        ui.show(mark),
+    }).alignment(.top_left);
+
+    fn mark(self: *const Easel) @TypeOf(ui.rect().frame(.{}).popup(isOpen, close, ui.rect().frame(.{}), .{}, .{})) {
+        return ui.rect().frame(.{ .width = 0, .height = 0 }).popup(
+            isOpen,
+            close,
+            ui.rect().frame(.{ .width = 80, .height = 60 }),
+            .{ .from = .top_left, .offset = self.at },
+            .{},
+        );
+    }
+
+    fn isOpen(self: *const Easel) bool {
+        return self.open;
+    }
+
+    fn close(self: *Easel) void {
+        self.open = false;
+    }
+
+    fn pressed(self: *Easel, pointer: ui.Pointer) bool {
+        if (pointer.button != .right) return false;
+        if (pointer.phase == .down) {
+            self.at = .{ .x = pointer.x, .y = pointer.y };
+            self.open = true;
+        }
+        return true;
+    }
+};
+
+fn rightClick(s: anytype, at: ui.Point) !void {
+    buttonOf(s, .right, true, at);
+    buttonOf(s, .right, false, at);
+    try frame(s);
+    try frame(s);
+}
+
+test "a popup opens where it is asked for, and again where another button is pressed outside it" {
+    var s: Scene(Easel) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const content = &s.root.children[0].children[1].children[1];
+
+    try rightClick(&s, .{ .x = 50, .y = 40 });
+    try expect(s.root.widget.open);
+    try expectEqual(ui.Point{ .x = 50, .y = 40 }, ui.offsetOf(content));
+
+    try rightClick(&s, .{ .x = 200, .y = 150 });
+    try expect(s.root.widget.open);
+    try expectEqual(ui.Point{ .x = 200, .y = 150 }, ui.offsetOf(content));
+
+    // Near the corner of the window the popup is moved back inside.
+    try rightClick(&s, .{ .x = 380, .y = 290 });
+    try expectEqual(ui.Point{ .x = 320, .y = 240 }, ui.offsetOf(content));
+
+    try click(&s, .{ .x = 100, .y = 100 });
+    try expect(!s.root.widget.open);
+}
