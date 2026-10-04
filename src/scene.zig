@@ -13,17 +13,17 @@ const paint = @import("paint.zig").paint;
 const Tasks = @import("task.zig").Tasks;
 const tree = @import("tree.zig");
 
-// A tree of views with its focus and pointer. `Impl` hands over the events
-// and receives the drawing: `next(wait)` returns the next event or null, and
-// waits up to `wait` seconds for one to arrive, not at all for 0 and without
-// end for infinity; `size()` and `now()`, in seconds, are read on every
-// frame; `begin()` returns the canvas to draw to, or null to skip the
-// drawing, and `end()` shows it; `wake()` makes a waiting `next`, or else
-// the next one that waits, return, and is called from other threads;
-// `input(area)` starts the typing of text at `area`, or stops it when the
-// area is null, which also ends what an input method is composing;
-// `copy(text)` puts text into the clipboard and returns whether it took it,
-// and `paste(allocator)` returns a copy of what it holds, or null.
+/// A tree of views with its focus and pointer. `Impl` hands over the events
+/// and receives the drawing: `next(wait)` returns the next event or null, and
+/// waits up to `wait` seconds for one to arrive, not at all for 0 and without
+/// end for infinity; `size()` and `now()`, in seconds, are read on every
+/// frame; `begin()` returns the canvas to draw to, or null to skip the
+/// drawing, and `end()` shows it; `wake()` makes a waiting `next`, or else
+/// the next one that waits, return, and is called from other threads;
+/// `input(area)` starts the typing of text at `area`, or stops it when the
+/// area is null, which also ends what an input method is composing;
+/// `copy(text)` puts text into the clipboard and returns whether it took it,
+/// and `paste(allocator)` returns a copy of what it holds, or null.
 pub fn Scene(comptime Impl: type, comptime Root: type) type {
     if (!node_zig.isComponent(Root)) {
         @compileError("the root must be a component with a view");
@@ -45,20 +45,20 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         size: Extent = .{},
         pointer: ?Point = null,
         pending: bool = true,
-        // The node that holds the pointer, and where the pointer was seen
-        // last, which is kept while it is outside the window.
+        /// The node that holds the pointer, and where the pointer was seen
+        /// last, which is kept while it is outside the window.
         held: NodeId = 0,
         last: Point = .{},
-        // The node that takes the typed text.
+        /// The node that takes the typed text.
         typing: NodeId = 0,
-        // When the last drawing asked for the next one.
+        /// When the last drawing asked for the next one.
         again: f64 = std.math.inf(f64),
 
         const Self = @This();
 
-        // The scene keeps the only copy of `root` that stays up to date, so
-        // what the root allocates is freed by its `unmount`, not by the
-        // caller.
+        /// The scene keeps the only copy of `root` that stays up to date, so
+        /// what the root allocates is freed by its `unmount`, not by the
+        /// caller.
         pub fn init(
             gpa: std.mem.Allocator,
             options: Impl.Options,
@@ -85,8 +85,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             return s;
         }
 
-        // Waits for the functions that still run in the background. The
-        // tree goes first, because an `unmount` may spawn one more.
+        /// Waits for the functions that still run in the background. The
+        /// tree goes first, because an `unmount` may spawn one more.
         pub fn deinit(s: *Self) void {
             s.state.host.impl = &s.impl;
             tree.destroy(&s.root, &s.state, .{});
@@ -111,7 +111,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             while (try s.frame()) {}
         }
 
-        // Whether the next frame is needed without waiting for input.
+        /// Whether the next frame is needed without waiting for input.
         pub fn busy(s: *const Self) bool {
             return s.pending or s.state.animating or s.strays();
         }
@@ -121,10 +121,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             return s.held != 0 and !node_zig.contains(s.state.hover.slice(), s.held);
         }
 
-        // Returns false once the implementation reports a close. The scene
-        // must stay where it is from its first frame on, because a function
-        // in the background wakes the implementation where the last frame
-        // found it.
+        /// Returns false once the implementation reports a close. The scene
+        /// must stay where it is from its first frame on, because a function
+        /// in the background wakes the implementation where the last frame
+        /// found it.
         pub fn frame(s: *Self) !bool {
             s.state.host.impl = &s.impl;
             s.state.tasks.waker.store(&s.impl, .release);

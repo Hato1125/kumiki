@@ -1,9 +1,9 @@
 const std = @import("std");
 
-// The code points a font has glyphs for.
+/// The code points a font has glyphs for.
 pub const Coverage = struct {
-    // Sorted, with both ends inside. No ranges at all stand for a font that
-    // is taken to have every glyph.
+    /// Sorted, with both ends inside. No ranges at all stand for a font that
+    /// is taken to have every glyph.
     ranges: []const [2]u32 = &.{},
 
     pub fn deinit(coverage: Coverage, gpa: std.mem.Allocator) void {
@@ -28,8 +28,8 @@ pub const Coverage = struct {
         return false;
     }
 
-    // Reads the cmap table of a TTF or OTF file. The table of the formats
-    // that ThorVG draws from is taken: 12 before 4.
+    /// Reads the cmap table of a TTF or OTF file. The table of the formats
+    /// that ThorVG draws from is taken: 12 before 4.
     pub fn parse(gpa: std.mem.Allocator, file: []const u8) !Coverage {
         const cmap = try table(file, "cmap");
         var chosen: ?[]const u8 = null;

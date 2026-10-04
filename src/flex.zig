@@ -10,9 +10,9 @@ pub const Axis = enum { horizontal, vertical };
 pub const MainAlign = enum { start, center, end, between };
 pub const CrossAlign = enum { start, center, end, stretch };
 
-// The config of a row or column. Children with a flex factor share the free
-// space in proportion to it. The container spans the whole axis when it has
-// such children or when `main` needs free space to distribute.
+/// The config of a row or column. Children with a flex factor share the free
+/// space in proportion to it. The container spans the whole axis when it has
+/// such children or when `main` needs free space to distribute.
 pub fn Flex(comptime axis: Axis) type {
     return struct {
         gap: f32 = 0,

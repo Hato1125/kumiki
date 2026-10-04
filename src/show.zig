@@ -25,16 +25,16 @@ pub fn Show(comptime f: anytype) type {
     };
 }
 
-// Shows the view that `f` returns. `f` runs whenever the view is built, and
-// its parameters are filled in by type, as described at `invoke` in
-// call.zig.
+/// Shows the view that `f` returns. `f` runs whenever the view is built, and
+/// its parameters are filled in by type, as described at `invoke` in
+/// call.zig.
 pub fn show(comptime f: anytype) Show(f) {
     return .{};
 }
 
-// The config of a `when`: shows the first child while `cond_fn` returns true
-// and the second otherwise. Both are kept, so switching back and forth keeps
-// their state.
+/// The config of a `when`: shows the first child while `cond_fn` returns true
+/// and the second otherwise. Both are kept, so switching back and forth keeps
+/// their state.
 pub fn When(comptime cond_fn: anytype) type {
     return struct {
         active: bool = true,

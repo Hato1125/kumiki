@@ -41,14 +41,14 @@ fn resolve(
     return if (comptime isShow(View)) invoke(View.func, owners, state, {}) else value;
 }
 
-// Builds the node of `value` in `node`. A node holds the nodes of everything
-// inside it, so returning nodes by value would copy a large tree once per
-// level and overflow the stack.
-//
-// A component may declare `pub fn mount` and `pub fn unmount`. They run when
-// its node enters and leaves the tree, and their parameters are filled in by
-// type, as described at `invoke` in call.zig. `pub fn provide` runs after
-// `mount` and whenever the component is built again.
+/// Builds the node of `value` in `node`. A node holds the nodes of everything
+/// inside it, so returning nodes by value would copy a large tree once per
+/// level and overflow the stack.
+///
+/// A component may declare `pub fn mount` and `pub fn unmount`. They run when
+/// its node enters and leaves the tree, and their parameters are filled in by
+/// type, as described at `invoke` in call.zig. `pub fn provide` runs after
+/// `mount` and whenever the component is built again.
 pub fn mount(
     node: anytype,
     value: anytype,
@@ -167,10 +167,10 @@ fn apply(
     }
 }
 
-// Visits every node, builds the components marked dirty again and moves
-// the running animations forward. The strings of the last build are freed
-// only after everything inside was built too, because the new values are
-// compared with the old ones.
+/// Visits every node, builds the components marked dirty again and moves
+/// the running animations forward. The strings of the last build are freed
+/// only after everything inside was built too, because the new values are
+/// compared with the old ones.
 pub fn rebuild(node: anytype, state: *State, owners: anytype) void {
     const Widget = @TypeOf(node.widget);
     if (comptime isComponent(Widget)) {
@@ -214,7 +214,7 @@ pub fn markAll(node: anytype) void {
     _ = each(node, .all, markAll, .{});
 }
 
-// Marks the components that entered or left the path.
+/// Marks the components that entered or left the path.
 pub fn markChanged(
     node: anytype,
     before: []const node_zig.NodeId,
@@ -229,10 +229,10 @@ pub fn markChanged(
     _ = each(node, .all, markChanged, .{ before, after });
 }
 
-// A component received as a mutable pointer may have been changed, so it and
-// everything inside it are built again. The same goes for the component
-// holding a field received as a mutable pointer. A pointer that no owner
-// fills in is the event, such as the result of a background function.
+/// A component received as a mutable pointer may have been changed, so it and
+/// everything inside it are built again. The same goes for the component
+/// holding a field received as a mutable pointer. A pointer that no owner
+/// fills in is the event, such as the result of a background function.
 pub fn markTargets(comptime f: anytype, owners: anytype) void {
     inline for (@typeInfo(@TypeOf(f)).@"fn".params) |param| {
         const P = param.type.?;

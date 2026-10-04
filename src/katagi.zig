@@ -61,7 +61,7 @@ pub fn rect() Rect {
     return .{};
 }
 
-// Shows `source`, or nothing while it is null.
+/// Shows `source`, or nothing while it is null.
 pub fn image(source: ?Image) Picture {
     return .{ .source = source };
 }
@@ -88,9 +88,9 @@ pub fn stack(
     return .{ .children = children, .config = .{} };
 }
 
-// `source` returns a slice and `make` turns an element, or a pointer to it,
-// into the view of its row. The parameters of `source` are filled in by type
-// like those of `ui.show`.
+/// `source` returns a slice and `make` turns an element, or a pointer to it,
+/// into the view of its row. The parameters of `source` are filled in by type
+/// like those of `ui.show`.
 pub fn list(
     comptime source: anytype,
     comptime make: anytype,
@@ -102,8 +102,8 @@ fn When(comptime cond: anytype, comptime A: type, comptime B: type) type {
     return mod.Container(struct { A, B }, show_zig.When(cond));
 }
 
-// Shows `a` while `cond` returns true and `b` otherwise. The parameters of
-// `cond` are filled in by type like those of `ui.show`.
+/// Shows `a` while `cond` returns true and `b` otherwise. The parameters of
+/// `cond` are filled in by type like those of `ui.show`.
 pub fn when(
     comptime cond: anytype,
     a: anytype,
@@ -122,7 +122,7 @@ pub fn Each(
     return @Tuple(&element_types);
 }
 
-// The tuple `.{ F(args..., 0){}, ..., F(args..., n - 1){} }` of components.
+/// The tuple `.{ F(args..., 0){}, ..., F(args..., n - 1){} }` of components.
 pub fn each(
     comptime n: usize,
     comptime F: anytype,

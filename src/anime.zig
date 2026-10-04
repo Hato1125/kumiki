@@ -8,7 +8,7 @@ pub const Curve = union(enum) {
     bezier: [4]f32,
     spring: Spring,
 
-    // Maps progress in [0, 1] onto the curve. Beziers and springs may overshoot.
+    /// Maps progress in [0, 1] onto the curve. Beziers and springs may overshoot.
     pub fn apply(curve: Curve, t: f32) f32 {
         return switch (curve) {
             .linear => t,
@@ -44,15 +44,15 @@ fn bezierAt(p: [4]f32, t: f32) f32 {
     return bezierCoordinate(p[1], p[3], (low + high) / 2);
 }
 
-// A unit mass on a spring, released at rest one unit away from where it
-// settles. `damping` is the damping ratio: below 1 the mass bounces.
+/// A unit mass on a spring, released at rest one unit away from where it
+/// settles. `damping` is the damping ratio: below 1 the mass bounces.
 pub const Spring = struct {
     damping: f32 = 1,
     stiffness: f32,
 
     const tolerance = 0.001;
 
-    // How far the mass has come after `t` seconds: 0 at the start, 1 at rest.
+    /// How far the mass has come after `t` seconds: 0 at the start, 1 at rest.
     pub fn position(s: Spring, t: f32) f32 {
         const frequency = @sqrt(s.stiffness);
         const ratio = s.damping;
@@ -68,8 +68,8 @@ pub const Spring = struct {
         return 1 - (fast * @exp(slow * t) - slow * @exp(fast * t)) / (fast - slow);
     }
 
-    // Seconds until the mass stays within `tolerance` of rest. At critical
-    // damping, (1 + x) * exp(-x) falls below the tolerance at x = 9.2334.
+    /// Seconds until the mass stays within `tolerance` of rest. At critical
+    /// damping, (1 + x) * exp(-x) falls below the tolerance at x = 9.2334.
     pub fn settleTime(s: Spring) f32 {
         const frequency = @sqrt(s.stiffness);
         const ratio = s.damping;
@@ -84,13 +84,13 @@ pub const Animation = struct {
     duration: f32 = 0.25,
     curve: Curve = .ease_in_out,
 
-    // Follows a spring for as long as it takes to settle.
+    /// Follows a spring for as long as it takes to settle.
     pub fn spring(damping: f32, stiffness: f32) Animation {
         const s: Spring = .{ .damping = damping, .stiffness = stiffness };
         return .{ .duration = s.settleTime(), .curve = .{ .spring = s } };
     }
 
-    // `points` are the x1, y1, x2, y2 of a CSS cubic-bezier().
+    /// `points` are the x1, y1, x2, y2 of a CSS cubic-bezier().
     pub fn bezier(duration: f32, points: [4]f32) Animation {
         return .{ .duration = duration, .curve = .{ .bezier = points } };
     }
@@ -109,8 +109,8 @@ pub fn Tween(comptime T: type) type {
             return .{ .from = value, .to = value };
         }
 
-        // Starts moving from the currently shown value toward `next`. An
-        // equal target is taken too, because it may hold newer strings.
+        /// Starts moving from the currently shown value toward `next`. An
+        /// equal target is taken too, because it may hold newer strings.
         pub fn retarget(tween: *Self, spec: Animation, next: T, now: f64) void {
             if (!same(T, next, tween.to)) {
                 tween.from = tween.at(spec, now);
@@ -134,8 +134,8 @@ pub fn Tween(comptime T: type) type {
     };
 }
 
-// Compares slices by content, so a string that was formatted again into a
-// new buffer does not restart an animation.
+/// Compares slices by content, so a string that was formatted again into a
+/// new buffer does not restart an animation.
 pub fn same(comptime T: type, a: T, b: T) bool {
     switch (@typeInfo(T)) {
         .pointer => |p| {
@@ -164,11 +164,11 @@ pub fn same(comptime T: type, a: T, b: T) bool {
     }
 }
 
-// Values that cannot be interpolated, such as slices and enums, switch to
-// `b` at once. `t` may leave [0, 1]; integers then stop at the ends of their
-// range. They go through f64, which holds every 32-bit integer exactly. A
-// struct that declares `lerp(a, b, t)` is interpolated by it instead of
-// field by field.
+/// Values that cannot be interpolated, such as slices and enums, switch to
+/// `b` at once. `t` may leave [0, 1]; integers then stop at the ends of their
+/// range. They go through f64, which holds every 32-bit integer exactly. A
+/// struct that declares `lerp(a, b, t)` is interpolated by it instead of
+/// field by field.
 pub fn lerp(comptime T: type, a: T, b: T, t: f32) T {
     if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "lerp")) {
         return T.lerp(a, b, t);

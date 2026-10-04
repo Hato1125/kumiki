@@ -25,12 +25,12 @@ pub const Text = struct {
         return mod.set(text, "text_color", c);
     }
 
-    // `name` is the file name of a loaded font without its extension.
+    /// `name` is the file name of a loaded font without its extension.
     pub fn font(text: Text, name: [:0]const u8) Text {
         return mod.set(text, "font_name", name);
     }
 
-    // The font for the characters that the font has no glyph for.
+    /// The font for the characters that the font has no glyph for.
     pub fn fallback(text: Text, name: [:0]const u8) Text {
         return mod.set(text, "fallback_name", name);
     }
@@ -53,19 +53,19 @@ pub const Text = struct {
         };
     }
 
-    // The width up to where the next character would go. It counts the
-    // spaces at the end, which `measure` leaves out, so a caret goes there.
+    /// The width up to where the next character would go. It counts the
+    /// spaces at the end, which `measure` leaves out, so a caret goes there.
     pub fn advance(text: Text) f32 {
         return canvas.textAdvance(text.content, text.style());
     }
 
-    // The position in the text whose advance is nearest to `x`: a byte
-    // offset between two code points, for a caret to go where a pointer is.
+    /// The position in the text whose advance is nearest to `x`: a byte
+    /// offset between two code points, for a caret to go where a pointer is.
     pub fn indexAt(text: Text, x: f32) usize {
         return canvas.textIndexAt(text.content, text.style(), x);
     }
 
-    // Wraps when the text is wider than the space offered.
+    /// Wraps when the text is wider than the space offered.
     pub fn measure(text: Text, c: Constraint) Extent {
         const natural = canvas.measureText(text.content, text.style(), 0);
         if (std.math.isInf(c.max.width) or natural.width <= c.max.width) {
@@ -95,7 +95,7 @@ pub const Text = struct {
     pub const with = mod.with;
 };
 
-// A rectangle that fills the space offered.
+/// A rectangle that fills the space offered.
 pub const Rect = struct {
     fill_color: Color = .black,
     stroke_color: Color = .transparent,
@@ -106,7 +106,7 @@ pub const Rect = struct {
         return mod.set(rect, "fill_color", c);
     }
 
-    // The stroke is drawn inside the rectangle.
+    /// The stroke is drawn inside the rectangle.
     pub fn stroke(rect: Rect, c: Color, width: f32) Rect {
         return mod.set(mod.set(rect, "stroke_color", c), "stroke_width", width);
     }
@@ -139,12 +139,12 @@ pub const Rect = struct {
     pub const with = mod.with;
 };
 
-// How an image goes into a box of another shape: stretched over it, as
-// large as fits inside, or as small as covers it with the rest cut off.
+/// How an image goes into a box of another shape: stretched over it, as
+/// large as fits inside, or as small as covers it with the rest cut off.
 pub const Fit = enum { fill, contain, cover };
 
-// An image at its own size, or smaller with the same shape where space is
-// short. With a fit it takes the space offered instead, like a rect.
+/// An image at its own size, or smaller with the same shape where space is
+/// short. With a fit it takes the space offered instead, like a rect.
 pub const Picture = struct {
     source: ?canvas.Image,
     fitting: ?Fit = null,
@@ -208,5 +208,5 @@ pub const Picture = struct {
     pub const with = mod.with;
 };
 
-// Takes the free space of a row or column.
+/// Takes the free space of a row or column.
 pub const Spacer = struct { flex: f32 = 1 };

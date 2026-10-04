@@ -1,10 +1,10 @@
-// Functions that run on threads of their own and hand what they return back
-// to the thread that started them.
+//! Functions that run on threads of their own and hand what they return back
+//! to the thread that started them.
 
 const std = @import("std");
 
-// Stands for a type at run time: the address of a byte that exists once per
-// type.
+/// Stands for a type at run time: the address of a byte that exists once per
+/// type.
 pub fn keyOf(comptime T: type) *const anyopaque {
     return &struct {
         const Of = T;
@@ -12,9 +12,9 @@ pub fn keyOf(comptime T: type) *const anyopaque {
     }.byte;
 }
 
-// A function on its way. Its thread sets `done`; everything else belongs to
-// the thread that started it. `tag` is what the starter wants back with the
-// result.
+/// A function on its way. Its thread sets `done`; everything else belongs to
+/// the thread that started it. `tag` is what the starter wants back with the
+/// result.
 pub const Task = struct {
     next: ?*Task,
     tag: u32,
@@ -25,15 +25,15 @@ pub const Task = struct {
     destroy: *const fn (*Task, std.mem.Allocator) void,
 };
 
-// `waker` is whom `wake` tells that a function has ended, and null while
-// nobody waits. It is set again and again by its owner, who may have moved.
+/// `waker` is whom `wake` tells that a function has ended, and null while
+/// nobody waits. It is set again and again by its owner, who may have moved.
 pub const Tasks = struct {
     gpa: std.mem.Allocator,
     first: ?*Task = null,
     waker: std.atomic.Value(?*anyopaque) = .init(null),
     wake: *const fn (*anyopaque) void,
 
-    // Runs `work(args...)` on a new thread.
+    /// Runs `work(args...)` on a new thread.
     pub fn spawn(
         tasks: *Tasks,
         tag: u32,
@@ -74,9 +74,9 @@ pub const Tasks = struct {
         tasks.first = &job.task;
     }
 
-    // Takes out a function that has ended. Its thread is joined first,
-    // because it still reads the task after it set `done`. The caller reads
-    // the result and then calls `destroy`.
+    /// Takes out a function that has ended. Its thread is joined first,
+    /// because it still reads the task after it set `done`. The caller reads
+    /// the result and then calls `destroy`.
     pub fn take(tasks: *Tasks) ?*Task {
         var link = &tasks.first;
         while (link.*) |task| : (link = &task.next) {
@@ -88,7 +88,7 @@ pub const Tasks = struct {
         return null;
     }
 
-    // Waits for the functions that still run and drops what they return.
+    /// Waits for the functions that still run and drops what they return.
     pub fn deinit(tasks: *Tasks) void {
         tasks.waker.store(null, .release);
         while (tasks.first) |task| {

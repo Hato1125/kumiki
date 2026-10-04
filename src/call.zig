@@ -6,8 +6,8 @@ const ReturnOf = node_zig.ReturnOf;
 const State = node_zig.State;
 const tree = @import("tree.zig");
 
-// Where a value lives among the owners: in a field of an owner, as what the
-// owner provides, or as the owner itself.
+/// Where a value lives among the owners: in a field of an owner, as what the
+/// owner provides, or as the owner itself.
 pub const Source = struct {
     owner: usize,
     field: ?[]const u8 = null,
@@ -25,11 +25,11 @@ fn WidgetOf(comptime Owner: type) type {
     return @FieldType(@typeInfo(Owner).pointer.child, "widget");
 }
 
-// `Owners` holds pointers to the nodes of the enclosing components, the
-// outermost first. The nearest component of type `P`, or pointed to by `P`,
-// wins. When there is none, the value comes from the nearest component that
-// has a field of that type or provides that type, which lets components
-// share a value, such as a theme, without knowing who holds it.
+/// `Owners` holds pointers to the nodes of the enclosing components, the
+/// outermost first. The nearest component of type `P`, or pointed to by `P`,
+/// wins. When there is none, the value comes from the nearest component that
+/// has a field of that type or provides that type, which lets components
+/// share a value, such as a theme, without knowing who holds it.
 pub fn find(comptime Owners: type, comptime P: type) ?Source {
     const T = Pointee(P);
     const owners = @typeInfo(Owners).@"struct".fields;
@@ -69,18 +69,18 @@ pub fn source(comptime Owners: type, comptime P: type) Source {
             @typeName(Pointee(P)) ++ " for this parameter");
 }
 
-// Whether a parameter of type `P` is filled in from the owners. One that is
-// not stands for the event.
+/// Whether a parameter of type `P` is filled in from the owners. One that is
+/// not stands for the event.
 pub fn fills(comptime Owners: type, comptime P: type) bool {
     return P == Context or isCallback(P) or find(Owners, P) != null;
 }
 
-// A function that a component is given when it is written in a view, for the
-// component to call later: `f` is a function, or `{}` for none. A function
-// of the component receives it by declaring a parameter of this type and
-// runs it with `call`. The parameters of `f` are filled in by type as if it
-// were given to a modifier at the place of the component, and the components
-// it receives as mutable pointers are built again.
+/// A function that a component is given when it is written in a view, for the
+/// component to call later: `f` is a function, or `{}` for none. A function
+/// of the component receives it by declaring a parameter of this type and
+/// runs it with `call`. The parameters of `f` are filled in by type as if it
+/// were given to a modifier at the place of the component, and the components
+/// it receives as mutable pointers are built again.
 pub fn Callback(comptime f: anytype) type {
     return struct {
         owners: *const anyopaque = undefined,
@@ -164,11 +164,11 @@ fn argument(
     return if (pointer) value else value.*;
 }
 
-// Calls `f`, filling each parameter by its type: a component type, or a
-// pointer to one, receives the nearest enclosing component of that type, any
-// other type receives what the nearest component that holds or provides one
-// has of it, ui.Context receives the Context of the nearest component and
-// the type of `event` receives the event being handled.
+/// Calls `f`, filling each parameter by its type: a component type, or a
+/// pointer to one, receives the nearest enclosing component of that type, any
+/// other type receives what the nearest component that holds or provides one
+/// has of it, ui.Context receives the Context of the nearest component and
+/// the type of `event` receives the event being handled.
 pub fn invoke(
     comptime f: anytype,
     owners: anytype,

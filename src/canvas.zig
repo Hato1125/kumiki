@@ -27,8 +27,8 @@ const LoadedFont = struct {
 
 var loaded_fonts: std.ArrayList(LoadedFont) = .empty;
 
-// Loads `font` for the text that names no font. An implementation calls this
-// before it measures or draws, and `shutdown` at its end.
+/// Loads `font` for the text that names no font. An implementation calls this
+/// before it measures or draws, and `shutdown` at its end.
 pub fn startup(font: ?[:0]const u8) !void {
     if (c.tvg_engine_init(0) != c.TVG_RESULT_SUCCESS) return error.EngineInit;
     errdefer shutdown();
@@ -48,8 +48,8 @@ pub fn shutdown() void {
     _ = c.tvg_engine_term();
 }
 
-// Loads a font that text can ask for by name. ThorVG looks fonts up by the
-// file name without its extension.
+/// Loads a font that text can ask for by name. ThorVG looks fonts up by the
+/// file name without its extension.
 pub fn addFont(path: [:0]const u8) !void {
     if (c.tvg_font_load(path) != c.TVG_RESULT_SUCCESS) return error.FontLoad;
     const kept = try gpa.dupeZ(u8, path);
@@ -94,10 +94,10 @@ fn coverageOf(name: []const u8) Coverage {
     return .{};
 }
 
-// Sizes are in pixels. A null `font` is the one given to startup, and a null
-// `line_height` is the font's own. `fallback` is the font for the characters
-// that the font has no glyph for. The lines and the baseline stay those of
-// the font.
+/// Sizes are in pixels. A null `font` is the one given to startup, and a null
+/// `line_height` is the font's own. `fallback` is the font for the characters
+/// that the font has no glyph for. The lines and the baseline stay those of
+/// the font.
 pub const TextStyle = struct {
     size: f32 = 16,
     font: ?[:0]const u8 = null,
@@ -175,8 +175,8 @@ fn newText(s: []const u8, style: TextStyle, width: f32) c.Tvg_Paint {
     return text;
 }
 
-// A positive `width` wraps the text at that width. ThorVG reports stale
-// bounds for an empty string, so its width is not asked for.
+/// A positive `width` wraps the text at that width. ThorVG reports stale
+/// bounds for an empty string, so its width is not asked for.
 pub fn measureText(s: []const u8, style: TextStyle, width: f32) Extent {
     if (Rulers.mixing(s, style)) |rulers| {
         defer rulers.deinit();
@@ -427,8 +427,8 @@ const LineIterator = struct {
     }
 };
 
-// The distance from the start of `s` to where a character after it would go.
-// Unlike the width that measureText gives, it counts the spaces at the end.
+/// The distance from the start of `s` to where a character after it would go.
+/// Unlike the width that measureText gives, it counts the spaces at the end.
 pub fn textAdvance(s: []const u8, style: TextStyle) f32 {
     if (s.len == 0) return 0;
     const rulers: Rulers = .init(style);
@@ -440,9 +440,9 @@ fn isContinuation(byte: u8) bool {
     return byte & 0xc0 == 0x80;
 }
 
-// The position in `s` whose advance is nearest to `x`: a byte offset between
-// two code points. The text is halved until two neighbors are left, since
-// ThorVG only tells how wide a whole text is.
+/// The position in `s` whose advance is nearest to `x`: a byte offset between
+/// two code points. The text is halved until two neighbors are left, since
+/// ThorVG only tells how wide a whole text is.
 pub fn textIndexAt(s: []const u8, style: TextStyle, x: f32) usize {
     const rulers: Rulers = .init(style);
     defer rulers.deinit();
@@ -469,8 +469,8 @@ pub fn textIndexAt(s: []const u8, style: TextStyle, x: f32) usize {
     return if (x - low_x <= rulers.advance(s[0..high]) - x) low else high;
 }
 
-// A PNG or JPG file that is read once and drawn as often as needed. It lives
-// between `startup` and `shutdown`.
+/// A PNG or JPG file that is read once and drawn as often as needed. It lives
+/// between `startup` and `shutdown`.
 pub const Image = struct {
     picture: c.Tvg_Paint,
 
@@ -488,7 +488,7 @@ pub const Image = struct {
         _ = c.tvg_paint_unref(image.picture, true);
     }
 
-    // In the pixels of the file.
+    /// In the pixels of the file.
     pub fn size(image: Image) Extent {
         var size_now: Extent = .{};
         _ = c.tvg_picture_get_size(image.picture, &size_now.width, &size_now.height);
@@ -512,7 +512,7 @@ pub const Corners = struct {
     }
 };
 
-// The stroke is centered on the outline.
+/// The stroke is centered on the outline.
 pub const PathStyle = struct {
     fill: ?Color = null,
     stroke: ?Color = null,
@@ -521,7 +521,7 @@ pub const PathStyle = struct {
     join: enum { miter, round, bevel } = .miter,
 };
 
-// An outline made with Canvas.path and drawn with Canvas.drawPath.
+/// An outline made with Canvas.path and drawn with Canvas.drawPath.
 pub const Path = struct {
     shape: c.Tvg_Paint,
 
@@ -553,9 +553,9 @@ pub const Path = struct {
         _ = c.tvg_shape_append_circle(p.shape, cx, cy, radius, radius, true);
     }
 
-    // Radii too large for the rectangle shrink together. `k` is how far a
-    // control point sits from the end of a quarter circle, as a fraction of
-    // the radius.
+    /// Radii too large for the rectangle shrink together. `k` is how far a
+    /// control point sits from the end of a quarter circle, as a fraction of
+    /// the radius.
     pub fn rect(p: Path, r: Bounds, corners: Corners) void {
         const w = @max(0, r.w);
         const h = @max(0, r.h);
@@ -596,8 +596,8 @@ pub const Canvas = struct {
     scale: f32 = 1,
     layers: [32]c.Tvg_Paint = undefined,
     depth: usize = 0,
-    // The time of the frame being drawn, and when the next one is due at
-    // the latest. The scene sets both and reads `again` after the drawing.
+    /// The time of the frame being drawn, and when the next one is due at
+    /// the latest. The scene sets both and reads `again` after the drawing.
     now: f64 = 0,
     again: f64 = std.math.inf(f64),
 
@@ -663,7 +663,7 @@ pub const Canvas = struct {
         canvas.add(shape);
     }
 
-    // The stroke is kept inside `r`.
+    /// The stroke is kept inside `r`.
     pub fn strokeRect(
         canvas: *Canvas,
         r: Bounds,
@@ -699,9 +699,9 @@ pub const Canvas = struct {
         canvas.add(circle.shape);
     }
 
-    // Draws with (x, y) at the top left of the first line. A positive
-    // `width` wraps the text at that width. The glyphs sit in the middle of
-    // a line taller or shorter than the font's own.
+    /// Draws with (x, y) at the top left of the first line. A positive
+    /// `width` wraps the text at that width. The glyphs sit in the middle of
+    /// a line taller or shorter than the font's own.
     pub fn text(
         canvas: *Canvas,
         x: f32,
@@ -770,8 +770,8 @@ pub const Canvas = struct {
         canvas.add(paint);
     }
 
-    // Draws the whole image stretched over `r`. Every drawing is a duplicate,
-    // which shares the pixels of the image.
+    /// Draws the whole image stretched over `r`. Every drawing is a duplicate,
+    /// which shares the pixels of the image.
     pub fn image(canvas: *Canvas, source: Image, r: Bounds) void {
         const natural = source.size();
         if (natural.width <= 0 or natural.height <= 0) return;
@@ -790,15 +790,15 @@ pub const Canvas = struct {
         canvas.add(picture);
     }
 
-    // An empty outline in the units of the other drawing calls.
+    /// An empty outline in the units of the other drawing calls.
     pub fn path(canvas: *Canvas) Path {
         const shape = c.tvg_shape_new();
         _ = c.tvg_paint_scale(shape, canvas.scale);
         return .{ .shape = shape };
     }
 
-    // Takes the path, which must not be used afterwards. ThorVG applies the
-    // scale of the shape to the stroke width.
+    /// Takes the path, which must not be used afterwards. ThorVG applies the
+    /// scale of the shape to the stroke width.
     pub fn drawPath(canvas: *Canvas, p: Path, style: PathStyle) void {
         const fill = style.fill orelse Color.transparent;
         const stroke = style.stroke orelse Color.transparent;
@@ -826,7 +826,7 @@ pub const Canvas = struct {
         canvas.add(p.shape);
     }
 
-    // Collects the following drawing into a layer for popLayer or popBlurred.
+    /// Collects the following drawing into a layer for popLayer or popBlurred.
     pub fn pushLayer(canvas: *Canvas) void {
         if (canvas.depth == canvas.layers.len) {
             @panic("layers nested too deeply");
@@ -850,8 +850,8 @@ pub const Canvas = struct {
         canvas.add(layer);
     }
 
-    // `sigma` is the standard deviation of the Gaussian. The layer itself is
-    // not scaled, so ThorVG takes it in pixels.
+    /// `sigma` is the standard deviation of the Gaussian. The layer itself is
+    /// not scaled, so ThorVG takes it in pixels.
     pub fn popBlurred(canvas: *Canvas, sigma: f32) void {
         canvas.depth -= 1;
         const layer = canvas.layers[canvas.depth];

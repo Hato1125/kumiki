@@ -1,5 +1,5 @@
-// A modifier is a method of every view that wraps the view in a Container:
-// children and a config that measures, places and paints them.
+//! A modifier is a method of every view that wraps the view in a Container:
+//! children and a config that measures, places and paints them.
 
 const std = @import("std");
 
@@ -70,7 +70,7 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
     };
 }
 
-// A copy of `view` with one field changed.
+/// A copy of `view` with one field changed.
 pub fn set(
     view: anytype,
     comptime field: []const u8,
@@ -97,11 +97,11 @@ fn Wrapped(comptime Self: type, comptime Config: type) type {
     return Container(struct { Base(Self) }, Config);
 }
 
-// Wraps the view in `config`, a struct that may declare any of
-// `measure(config, child, constraint) Extent`,
-// `layout(config, child, position, size) void`,
-// `beginPaint(config, painter) void` and `endPaint(config, painter) void`.
-// Without them the view keeps the size and the position of its child.
+/// Wraps the view in `config`, a struct that may declare any of
+/// `measure(config, child, constraint) Extent`,
+/// `layout(config, child, position, size) void`,
+/// `beginPaint(config, painter) void` and `endPaint(config, painter) void`.
+/// Without them the view keeps the size and the position of its child.
 pub fn with(
     self: anytype,
     config: anytype,
@@ -165,8 +165,8 @@ const Insets = struct {
     }
 };
 
-// `spec` is a number for all edges, or a struct with any of `x`, `y`, `top`,
-// `right`, `bottom` and `left`.
+/// `spec` is a number for all edges, or a struct with any of `x`, `y`, `top`,
+/// `right`, `bottom` and `left`.
 pub fn padding(self: anytype, spec: anytype) Wrapped(@TypeOf(self), Insets) {
     return with(self, Insets.from(spec));
 }
@@ -242,7 +242,7 @@ fn Backed(comptime Self: type, comptime Back: type) type {
     return if (Back == Color) Wrapped(Self, Fill) else Container(struct { Back, Base(Self) }, Plain);
 }
 
-// `back` is a view to draw behind this one at its size, or a color.
+/// `back` is a view to draw behind this one at its size, or a color.
 pub fn bg(self: anytype, back: anytype) Backed(@TypeOf(self), @TypeOf(back)) {
     if (@TypeOf(back) == Color) return with(self, Fill{ .color = back });
     return .{ .children = .{ back, base(self) }, .config = .{} };
@@ -287,8 +287,8 @@ fn Handler(comptime kind: HandlerKind, comptime f: anytype) type {
     };
 }
 
-// Runs `action` on a click, or on Enter or Space while focused. Components
-// that `action` receives as mutable pointers are built again after it runs.
+/// Runs `action` on a click, or on Enter or Space while focused. Components
+/// that `action` receives as mutable pointers are built again after it runs.
 pub fn tap(
     self: anytype,
     comptime action: anytype,
@@ -296,7 +296,7 @@ pub fn tap(
     return with(self, Handler(.tap, action){});
 }
 
-// Offers key presses to `handler`, which returns whether it used the key.
+/// Offers key presses to `handler`, which returns whether it used the key.
 pub fn key(
     self: anytype,
     comptime handler: anytype,
@@ -304,8 +304,8 @@ pub fn key(
     return with(self, Handler(.key, handler){});
 }
 
-// Offers the turns of the wheel over the view to `handler`, in a ui.Wheel
-// parameter. `handler` returns whether it used the turn.
+/// Offers the turns of the wheel over the view to `handler`, in a ui.Wheel
+/// parameter. `handler` returns whether it used the turn.
 pub fn wheel(
     self: anytype,
     comptime handler: anytype,
@@ -313,11 +313,11 @@ pub fn wheel(
     return with(self, Handler(.wheel, handler){});
 }
 
-// Offers what the left button does over the view to `handler`, in a
-// ui.Pointer parameter. When `handler` returns true for a press, the view
-// holds the pointer: the moves and the release reach it wherever the pointer
-// goes. While the pointer is held outside the view, the last move repeats on
-// every frame, so that the view can scroll after it.
+/// Offers what the left button does over the view to `handler`, in a
+/// ui.Pointer parameter. When `handler` returns true for a press, the view
+/// holds the pointer: the moves and the release reach it wherever the pointer
+/// goes. While the pointer is held outside the view, the last move repeats on
+/// every frame, so that the view can scroll after it.
 pub fn pointer(
     self: anytype,
     comptime handler: anytype,
@@ -325,8 +325,8 @@ pub fn pointer(
     return with(self, Handler(.pointer, handler){});
 }
 
-// Offers the text that is typed while the view, or something inside it, has
-// the focus to `handler`, in a ui.TextInput parameter.
+/// Offers the text that is typed while the view, or something inside it, has
+/// the focus to `handler`, in a ui.TextInput parameter.
 pub fn input(
     self: anytype,
     comptime handler: anytype,
@@ -341,8 +341,8 @@ fn Animated(comptime Child: type) type {
     };
 }
 
-// Moves the view from the value it shows to a new one over time whenever it
-// is built with a different value.
+/// Moves the view from the value it shows to a new one over time whenever it
+/// is built with a different value.
 pub fn animation(
     self: anytype,
     spec: anim.Animation,
@@ -350,7 +350,7 @@ pub fn animation(
     return with(self, Animated(Base(@TypeOf(self))){ .spec = spec });
 }
 
-// Gives modifiers to a value that has none, such as a component.
+/// Gives modifiers to a value that has none, such as a component.
 pub fn wrap(child: anytype) Wrapped(@TypeOf(child), Plain) {
     return with(child, Plain{});
 }

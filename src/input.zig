@@ -16,11 +16,11 @@ const offsetOf = node_zig.offsetOf;
 const task_zig = @import("task.zig");
 const markTargets = @import("tree.zig").markTargets;
 
-// The buttons, keys and modifier bits have the values of SDL3.
+/// The buttons, keys and modifier bits have the values of SDL3.
 pub const MouseButton = enum(u8) { left = 1, middle, right, x1, x2, _ };
 
-// `clicks` counts the presses that follow each other quickly at one place:
-// 2 for a double click. `mod` holds the modifier keys held meanwhile.
+/// `clicks` counts the presses that follow each other quickly at one place:
+/// 2 for a double click. `mod` holds the modifier keys held meanwhile.
 pub const MouseButtonEvent = struct {
     button: MouseButton,
     down: bool,
@@ -35,9 +35,9 @@ const ctrl_bits = 0x00c0;
 const alt_bits = 0x0300;
 const gui_bits = 0x0c00;
 
-// What the left button does over a view with a `pointer` modifier. `x` and
-// `y` count from the top left corner of that view. A hold ends with `up`, or
-// with `cancel` when the window loses the keyboard meanwhile.
+/// What the left button does over a view with a `pointer` modifier. `x` and
+/// `y` count from the top left corner of that view. A hold ends with `up`, or
+/// with `cancel` when the window loses the keyboard meanwhile.
 pub const Pointer = struct {
     phase: enum { down, move, up, cancel },
     x: f32 = 0,
@@ -68,14 +68,14 @@ pub const KeyPress = struct {
         return press.mod & alt_bits != 0;
     }
 
-    // Whether the key of shortcuts is held: Cmd on macOS and Ctrl elsewhere,
-    // where Ctrl together with Alt is AltGr, which types characters.
+    /// Whether the key of shortcuts is held: Cmd on macOS and Ctrl elsewhere,
+    /// where Ctrl together with Alt is AltGr, which types characters.
     pub fn command(press: KeyPress) bool {
         if (builtin.os.tag.isDarwin()) return press.mod & gui_bits != 0;
         return press.ctrl() and !press.alt();
     }
 
-    // Whether the key is Ctrl, Shift, Alt or GUI on either side.
+    /// Whether the key is Ctrl, Shift, Alt or GUI on either side.
     pub fn isModifier(press: KeyPress) bool {
         return press.key >= 0x400000e0 and press.key <= 0x400000e7;
     }
@@ -96,20 +96,20 @@ pub const keys = struct {
     pub const up: u32 = 0x40000052;
 };
 
-// Text that was typed, or that an input method is still composing: each
-// composition replaces the one before, and an empty one ends it. `text` is
-// UTF-8 and only valid while the function it is given to runs. `marked` are
-// the bytes of a composition that the input method works on, with its caret
-// at their start, or null when it does not tell.
+/// Text that was typed, or that an input method is still composing: each
+/// composition replaces the one before, and an empty one ends it. `text` is
+/// UTF-8 and only valid while the function it is given to runs. `marked` are
+/// the bytes of a composition that the input method works on, with its caret
+/// at their start, or null when it does not tell.
 pub const TextInput = struct {
     text: []const u8,
     composing: bool = false,
     marked: ?types.Range = null,
 };
 
-// How far the wheel turned while the pointer was at `at`. As SDL3 reports
-// it, a positive `x` is to the right and a positive `y` is away from the
-// user.
+/// How far the wheel turned while the pointer was at `at`. As SDL3 reports
+/// it, a positive `x` is to the right and a positive `y` is away from the
+/// user.
 pub const Wheel = struct {
     x: f32 = 0,
     y: f32 = 0,
@@ -123,13 +123,13 @@ pub const Event = union(enum) {
     wheel: Wheel,
     key: KeyPress,
     text: TextInput,
-    // Whether the keyboard is with the window.
+    /// Whether the keyboard is with the window.
     active: bool,
     close,
 };
 
-// Collects `target` and its ancestors. Like the other searches for input, it
-// passes over what a `when` does not show.
+/// Collects `target` and its ancestors. Like the other searches for input, it
+/// passes over what a `when` does not show.
 pub fn findPath(node: anytype, target: NodeId, path: *Path) bool {
     if (node.id != target and !each(node, .shown, findPath, .{ target, path })) {
         return false;
@@ -138,8 +138,8 @@ pub fn findPath(node: anytype, target: NodeId, path: *Path) bool {
     return true;
 }
 
-// Collects the deepest node at `at` and its ancestors. Later children are in
-// front of earlier ones.
+/// Collects the deepest node at `at` and its ancestors. Later children are in
+/// front of earlier ones.
 pub fn hit(node: anytype, at: Point, path: *Path) bool {
     const origin = offsetOf(node);
     const x = at.x - origin.x;
@@ -157,8 +157,8 @@ pub const Nearest = struct {
     focusable: NodeId = 0,
 };
 
-// Finds the nearest tap and the nearest focusable node among `target` and
-// its ancestors.
+/// Finds the nearest tap and the nearest focusable node among `target` and
+/// its ancestors.
 pub fn nearest(node: anytype, target: NodeId, found: *Nearest) bool {
     if (node.id != target and !each(node, .shown, nearest, .{ target, found })) {
         return false;
@@ -173,8 +173,8 @@ pub fn nearest(node: anytype, target: NodeId, found: *Nearest) bool {
     return true;
 }
 
-// Records the focusable nodes around `current` while walking the tree in
-// order.
+/// Records the focusable nodes around `current` while walking the tree in
+/// order.
 pub const FocusWalk = struct {
     current: NodeId,
     seen: bool = false,
@@ -195,7 +195,7 @@ pub const FocusWalk = struct {
         }
     }
 
-    // Wraps around at both ends.
+    /// Wraps around at both ends.
     pub fn result(walk: FocusWalk, backward: bool) NodeId {
         if (backward) return if (walk.before != 0) walk.before else walk.last;
         return if (walk.after != 0) walk.after else walk.first;
@@ -230,17 +230,17 @@ fn boundsOf(node: anytype) types.Bounds {
     };
 }
 
-// The node that takes typed text and where an input method shows what it
-// offers for it. `area` is null when the node takes none at the moment.
+/// The node that takes typed text and where an input method shows what it
+/// offers for it. `area` is null when the node takes none at the moment.
 pub const Typing = struct {
     target: NodeId = 0,
     area: ?types.Bounds = null,
 };
 
-// Finds the nearest node that takes typed text among `target` and its
-// ancestors. Its area is its bounds, unless a leaf inside it declares
-// `pub fn caret(leaf, bounds) ?ui.Bounds`: the leaf then says where in its
-// bounds the text goes, or null to take none.
+/// Finds the nearest node that takes typed text among `target` and its
+/// ancestors. Its area is its bounds, unless a leaf inside it declares
+/// `pub fn caret(leaf, bounds) ?ui.Bounds`: the leaf then says where in its
+/// bounds the text goes, or null to take none.
 pub fn typingArea(node: anytype, target: NodeId, found: *Typing) bool {
     if (node.id != target and !each(node, .shown, typingArea, .{ target, found })) {
         return false;
@@ -263,7 +263,7 @@ fn caretIn(node: anytype, area: *?types.Bounds) bool {
     return each(node, .shown, caretIn, .{area});
 }
 
-// What is offered to a node and then to its ancestors.
+/// What is offered to a node and then to its ancestors.
 pub const Offer = union(enum) {
     click,
     wheel: Wheel,
@@ -316,8 +316,8 @@ fn handle(
     return true;
 }
 
-// Offers `offer` to `target` and then to its ancestors until one handles
-// it, which `by` then names. Returns whether `target` is inside `node`.
+/// Offers `offer` to `target` and then to its ancestors until one handles
+/// it, which `by` then names. Returns whether `target` is inside `node`.
 pub fn bubble(
     node: anytype,
     target: NodeId,
@@ -334,10 +334,10 @@ pub fn bubble(
     return true;
 }
 
-// Hands the result of a background function to the `receive` of the
-// component `target`, or of the nearest one around it that takes the
-// result's type in the one parameter that its owners do not fill in. Returns
-// whether `target` is inside `node`.
+/// Hands the result of a background function to the `receive` of the
+/// component `target`, or of the nearest one around it that takes the
+/// result's type in the one parameter that its owners do not fill in. Returns
+/// whether `target` is inside `node`.
 pub fn deliver(
     node: anytype,
     target: NodeId,

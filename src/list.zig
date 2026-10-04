@@ -8,9 +8,9 @@ const pass = @import("layout.zig");
 const mod = @import("mod.zig");
 const ReturnOf = @import("node.zig").ReturnOf;
 
-// Stacks one row per element of the slice that `source_fn` returns. Rows
-// follow the `id` field of the elements when they have one, and their index
-// otherwise.
+/// Stacks one row per element of the slice that `source_fn` returns. Rows
+/// follow the `id` field of the elements when they have one, and their index
+/// otherwise.
 pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
     const Slice = ReturnOf(source_fn);
     const Element = @typeInfo(Slice).pointer.child;
@@ -31,14 +31,14 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
             return mod.set(list, "spacing", spacing);
         }
 
-        // Takes the settings of `next`. The keys stay, because they belong
-        // to the rows.
+        /// Takes the settings of `next`. The keys stay, because they belong
+        /// to the rows.
         pub fn adopt(list: *Self, next: Self) void {
             list.spacing = next.spacing;
         }
 
-        // `make` takes a pointer to the element when its parameter is one,
-        // so rows can change their element.
+        /// `make` takes a pointer to the element when its parameter is one,
+        /// so rows can change their element.
         pub fn item(elements: Slice, i: usize) Row {
             const Param = @typeInfo(@TypeOf(make)).@"fn".params[0].type.?;
             return make(if (comptime @typeInfo(Param) == .pointer) &elements[i] else elements[i]);
@@ -48,7 +48,7 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
             return if (comptime is_string) std.mem.eql(u8, a, b) else a == b;
         }
 
-        // String keys are copied because the elements may change them.
+        /// String keys are copied because the elements may change them.
         pub fn ownKey(gpa: std.mem.Allocator, id: Id) Id {
             return if (comptime is_string) gpa.dupe(u8, id) catch @panic("out of memory") else id;
         }

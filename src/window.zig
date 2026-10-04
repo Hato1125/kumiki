@@ -8,14 +8,14 @@ const Extent = types.Extent;
 const Event = @import("input.zig").Event;
 const Scene = @import("scene.zig").Scene;
 
-// The implementation of a Scene in a resizable SDL3 window with OpenGL 3.3.
+/// The implementation of a Scene in a resizable SDL3 window with OpenGL 3.3.
 pub const Window = struct {
     window: *c.SDL_Window,
     gl: c.SDL_GLContext,
     canvas: Canvas,
 
-    // `font` is the TTF or OTF file of the text that names no font, and
-    // `fonts` are more files for the text that asks for them by name.
+    /// `font` is the TTF or OTF file of the text that names no font, and
+    /// `fonts` are more files for the text that asks for them by name.
     pub const Options = struct {
         title: [:0]const u8 = "katagi",
         width: u32 = 800,
@@ -65,8 +65,8 @@ pub const Window = struct {
         c.SDL_Quit();
     }
 
-    // After waiting, null also stands for events the scene does not see,
-    // such as a resize, so that the frame is drawn again.
+    /// After waiting, null also stands for events the scene does not see,
+    /// such as a resize, so that the frame is drawn again.
     pub fn next(_: *Window, wait: f64) ?Event {
         var event: c.SDL_Event = undefined;
         var arrived = if (wait <= 0)
@@ -88,8 +88,8 @@ pub const Window = struct {
         _ = c.SDL_PushEvent(&event);
     }
 
-    // Shows the candidates of an input method near `area`. Stopping the
-    // input ends a composition on most systems, and clearing it on the rest.
+    /// Shows the candidates of an input method near `area`. Stopping the
+    /// input ends a composition on most systems, and clearing it on the rest.
     pub fn input(w: *Window, area: ?types.Bounds) void {
         const at = area orelse {
             _ = c.SDL_ClearComposition(w.window);
@@ -135,7 +135,7 @@ pub const Window = struct {
         return @as(f64, @floatFromInt(c.SDL_GetTicksNS())) / std.time.ns_per_s;
     }
 
-    // A minimized window has nothing to draw to.
+    /// A minimized window has nothing to draw to.
     pub fn begin(w: *Window) !?*Canvas {
         _ = c.SDL_GL_MakeCurrent(w.window, w.gl);
         const pixels = pixelSize(w.window);
@@ -218,7 +218,7 @@ fn marked(text: []const u8, start: i32, length: i32) ?types.Range {
     return range;
 }
 
-// Opens a window showing `root`, a component, and returns when it is closed.
+/// Opens a window showing `root`, a component, and returns when it is closed.
 pub fn run(
     gpa: std.mem.Allocator,
     options: Window.Options,

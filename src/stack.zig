@@ -4,8 +4,8 @@ const Extent = types.Extent;
 const Point = types.Point;
 const pass = @import("layout.zig");
 
-// Where something smaller sits inside a larger area: 0 is the left or top
-// edge and 1 is the right or bottom edge.
+/// Where something smaller sits inside a larger area: 0 is the left or top
+/// edge and 1 is the right or bottom edge.
 pub const Alignment = struct {
     x: f32 = 0.5,
     y: f32 = 0.5,
@@ -28,8 +28,8 @@ pub const Alignment = struct {
     }
 };
 
-// The config of a stack: children lie on top of each other, later ones in
-// front, and the stack is as large as its largest child.
+/// The config of a stack: children lie on top of each other, later ones in
+/// front, and the stack is as large as its largest child.
 pub const Stack = struct {
     alignment: Alignment = .center,
 

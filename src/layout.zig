@@ -6,9 +6,9 @@ const node_zig = @import("node.zig");
 const each = node_zig.each;
 const has = node_zig.has;
 
-// Measures `node` and everything inside it, and returns its size, which also
-// stays in `node.size`. A config measures all of its children in
-// `measureAll`, or the one child of a modifier in `measure`.
+/// Measures `node` and everything inside it, and returns its size, which also
+/// stays in `node.size`. A config measures all of its children in
+/// `measureAll`, or the one child of a modifier in `measure`.
 pub fn measure(node: anytype, c: Constraint) Extent {
     const Widget = @TypeOf(node.widget);
     const children = &node.children;
@@ -33,7 +33,7 @@ fn measureLast(children: anytype, c: Constraint) Extent {
     return size;
 }
 
-// Places `node`, which was measured before, and everything inside it.
+/// Places `node`, which was measured before, and everything inside it.
 pub fn layout(node: anytype, at: Point) void {
     const Widget = @TypeOf(node.widget);
     const children = &node.children;
@@ -48,8 +48,8 @@ pub fn layout(node: anytype, at: Point) void {
     _ = each(node, .all, layout, .{at});
 }
 
-// The share of the free space that a row or column gives this child, seen
-// through components.
+/// The share of the free space that a row or column gives this child, seen
+/// through components.
 pub fn flexOf(node: anytype) f32 {
     const Widget = @TypeOf(node.widget);
     if (comptime node_zig.isComponent(Widget)) return flexOf(&node.children[0]);

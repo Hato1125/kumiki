@@ -3,10 +3,10 @@ const std = @import("std");
 const Tasks = @import("task.zig").Tasks;
 const types = @import("types.zig");
 
-// Counts up from 1. 0 stands for no node.
+/// Counts up from 1. 0 stands for no node.
 pub const NodeId = u32;
 
-// A node and its ancestors, the node itself first.
+/// A node and its ancestors, the node itself first.
 pub const Path = struct {
     ids: [128]NodeId = undefined,
     len: usize = 0,
@@ -25,7 +25,7 @@ pub const Path = struct {
         path.len += 1;
     }
 
-    // The part of the path from `node` up to the root.
+    /// The part of the path from `node` up to the root.
     pub fn from(path: *const Path, node: NodeId) Path {
         var tail: Path = .{};
         const start = std.mem.indexOfScalar(NodeId, path.slice(), node) orelse return tail;
@@ -38,15 +38,15 @@ pub fn contains(path: []const NodeId, id: NodeId) bool {
     return std.mem.indexOfScalar(NodeId, path, id) != null;
 }
 
-// What a scene shares with every pass over its tree. `animating`, `built` and
-// `stale` tell what the last build did: an animation still runs, something
-// was built again, a path may have changed because a list matched its rows
-// again or a `when` switched. `keyboard` is whether the last input came from
-// the keyboard, and `active` whether the keyboard is with the window of the
-// scene at all. `tasks` lives on the heap, because functions in the
-// background point at it while the scene may still be moved. `inputs` counts
-// the nodes that take typed text, and `typing` is where the implementation
-// was asked for it.
+/// What a scene shares with every pass over its tree. `animating`, `built` and
+/// `stale` tell what the last build did: an animation still runs, something
+/// was built again, a path may have changed because a list matched its rows
+/// again or a `when` switched. `keyboard` is whether the last input came from
+/// the keyboard, and `active` whether the keyboard is with the window of the
+/// scene at all. `tasks` lives on the heap, because functions in the
+/// background point at it while the scene may still be moved. `inputs` counts
+/// the nodes that take typed text, and `typing` is where the implementation
+/// was asked for it.
 pub const State = struct {
     gpa: std.mem.Allocator,
     tasks: *Tasks,
@@ -65,8 +65,8 @@ pub const State = struct {
     keyboard: bool = false,
 };
 
-// The implementation as a Context reaches it, for its clipboard. The scene
-// points `impl` at where the implementation is before it runs functions.
+/// The implementation as a Context reaches it, for its clipboard. The scene
+/// points `impl` at where the implementation is before it runs functions.
 pub const Host = struct {
     impl: *anyopaque,
     paste: *const fn (*anyopaque, std.mem.Allocator) ?[]const u8,
@@ -85,8 +85,8 @@ pub fn isList(comptime T: type) bool {
     return @hasDecl(T, "source");
 }
 
-// A container is made of `children` and a `config` that measures, places and
-// paints them.
+/// A container is made of `children` and a `config` that measures, places and
+/// paints them.
 pub fn isContainer(comptime T: type) bool {
     return @hasField(T, "children");
 }
@@ -101,8 +101,8 @@ pub fn isFocusable(comptime T: type) bool {
     return handles(T, .tap) or handles(T, .key) or handles(T, .input);
 }
 
-// Whether a widget takes part in a pass through its declaration `name`. A
-// component is walked as the container of its view, whatever it declares.
+/// Whether a widget takes part in a pass through its declaration `name`. A
+/// component is walked as the container of its view, whatever it declares.
 pub fn has(comptime T: type, comptime name: []const u8) bool {
     return !isComponent(T) and @hasDecl(T, name);
 }
@@ -111,8 +111,8 @@ pub fn ReturnOf(comptime f: anytype) type {
     return @typeInfo(@TypeOf(f)).@"fn".return_type.?;
 }
 
-// A component that declares `pub fn provide` hands what that returns to the
-// functions inside it, which receive it by its type as they would a field.
+/// A component that declares `pub fn provide` hands what that returns to the
+/// functions inside it, which receive it by its type as they would a field.
 pub fn provides(comptime View: type) bool {
     return isComponent(View) and @hasDecl(View, "provide");
 }
@@ -135,10 +135,10 @@ fn keepsOffset(comptime View: type) bool {
     return @hasDecl(Config, "layout") or @hasDecl(Config, "layoutAll");
 }
 
-// The widget of a container is its config, because its children have nodes
-// of their own. The arena holds the strings made by Context.print until the
-// next build, and `given` what the component provided at its last build.
-// `offsetOf` reads the offset, which not every node keeps.
+/// The widget of a container is its config, because its children have nodes
+/// of their own. The arena holds the strings made by Context.print until the
+/// next build, and `given` what the component provided at its last build.
+/// `offsetOf` reads the offset, which not every node keeps.
 pub fn Node(comptime View: type) type {
     return struct {
         id: NodeId,
@@ -156,8 +156,8 @@ pub fn NodeOf(comptime View: type) type {
     return Node(Resolved(View));
 }
 
-// Where a node is: at its own offset, or where its last child is for a node
-// that keeps none.
+/// Where a node is: at its own offset, or where its last child is for a node
+/// that keeps none.
 pub fn offsetOf(node: anytype) types.Point {
     if (comptime @TypeOf(node.offset) != void) return node.offset;
     return offsetOf(&node.children[node.children.len - 1]);
@@ -175,9 +175,9 @@ fn Children(comptime View: type) type {
 
 pub const Order = enum { all, shown, front };
 
-// Calls `f(child, args...)` for the children of `node` until a call returns
-// true. `shown` leaves out the side of a `when` that is not on display, and
-// `front` also starts from the child in front.
+/// Calls `f(child, args...)` for the children of `node` until a call returns
+/// true. `shown` leaves out the side of a `when` that is not on display, and
+/// `front` also starts from the child in front.
 pub fn each(
     node: anytype,
     comptime order: Order,
