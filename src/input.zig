@@ -131,7 +131,9 @@ pub const Event = union(enum) {
 // Collects `target` and its ancestors. Like the other searches for input, it
 // passes over what a `when` does not show.
 pub fn findPath(node: anytype, target: NodeId, path: *Path) bool {
-    if (node.id != target and !each(node, .shown, findPath, .{ target, path })) return false;
+    if (node.id != target and !each(node, .shown, findPath, .{ target, path })) {
+        return false;
+    }
     path.push(node.id);
     return true;
 }
@@ -142,7 +144,9 @@ pub fn hit(node: anytype, at: Point, path: *Path) bool {
     const origin = offsetOf(node);
     const x = at.x - origin.x;
     const y = at.y - origin.y;
-    if (x < 0 or x >= node.size.width or y < 0 or y >= node.size.height) return false;
+    if (x < 0 or x >= node.size.width or y < 0 or y >= node.size.height) {
+        return false;
+    }
     _ = each(node, .front, hit, .{ at, path });
     path.push(node.id);
     return true;
@@ -156,7 +160,9 @@ pub const Nearest = struct {
 // Finds the nearest tap and the nearest focusable node among `target` and
 // its ancestors.
 pub fn nearest(node: anytype, target: NodeId, found: *Nearest) bool {
-    if (node.id != target and !each(node, .shown, nearest, .{ target, found })) return false;
+    if (node.id != target and !each(node, .shown, nearest, .{ target, found })) {
+        return false;
+    }
     const Widget = @TypeOf(node.widget);
     if (comptime handles(Widget, .tap)) {
         if (found.tap == 0) found.tap = node.id;
@@ -208,7 +214,9 @@ fn wrapsStop(comptime N: type) bool {
 }
 
 pub fn walkFocus(node: anytype, walk: *FocusWalk) void {
-    if (comptime isFocusable(@TypeOf(node.widget)) and !wrapsStop(@TypeOf(node.*))) walk.visit(node.id);
+    if (comptime isFocusable(@TypeOf(node.widget)) and !wrapsStop(@TypeOf(node.*))) {
+        walk.visit(node.id);
+    }
     _ = each(node, .shown, walkFocus, .{walk});
 }
 
@@ -234,7 +242,9 @@ pub const Typing = struct {
 // `pub fn caret(leaf, bounds) ?ui.Bounds`: the leaf then says where in its
 // bounds the text goes, or null to take none.
 pub fn typingArea(node: anytype, target: NodeId, found: *Typing) bool {
-    if (node.id != target and !each(node, .shown, typingArea, .{ target, found })) return false;
+    if (node.id != target and !each(node, .shown, typingArea, .{ target, found })) {
+        return false;
+    }
     if (comptime handles(@TypeOf(node.widget), .input)) {
         if (found.target == 0) {
             found.target = node.id;
@@ -273,7 +283,12 @@ fn activates(offer: Offer, state: *const State) bool {
     };
 }
 
-fn handle(node: anytype, offer: Offer, owners: anytype, state: *const State) bool {
+fn handle(
+    node: anytype,
+    offer: Offer,
+    owners: anytype,
+    state: *const State,
+) bool {
     const Widget = @TypeOf(node.widget);
     if (comptime !@hasDecl(Widget, "handler_kind")) return false;
     const f = Widget.handler;
@@ -312,7 +327,9 @@ pub fn bubble(
     by: *NodeId,
 ) bool {
     const inner = if (comptime node_zig.isComponent(@TypeOf(node.widget))) owners ++ .{node} else owners;
-    if (node.id != target and !each(node, .shown, bubble, .{ target, offer, inner, state, by })) return false;
+    if (node.id != target and !each(node, .shown, bubble, .{ target, offer, inner, state, by })) {
+        return false;
+    }
     if (by.* == 0 and handle(node, offer, owners, state)) by.* = node.id;
     return true;
 }
@@ -332,7 +349,9 @@ pub fn deliver(
     const Widget = @TypeOf(node.widget);
     const component = comptime node_zig.isComponent(Widget);
     const inner = if (component) owners ++ .{node} else owners;
-    if (node.id != target and !each(node, .all, deliver, .{ target, task, inner, state, handled })) return false;
+    if (node.id != target and !each(node, .all, deliver, .{ target, task, inner, state, handled })) {
+        return false;
+    }
     if (comptime !component or !@hasDecl(Widget, "receive")) return true;
 
     inline for (@typeInfo(@TypeOf(Widget.receive)).@"fn".params) |param| {

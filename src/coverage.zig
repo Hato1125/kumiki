@@ -36,7 +36,9 @@ pub const Coverage = struct {
         for (0..try int(u16, cmap, 2)) |i| {
             const record = 4 + i * 8;
             const platform = try int(u16, cmap, record);
-            if (platform != unicode_platform and platform != windows_platform) continue;
+            if (platform != unicode_platform and platform != windows_platform) {
+                continue;
+            }
             const offset = try int(u32, cmap, record + 4);
             if (offset > cmap.len) return error.Truncated;
             const subtable = cmap[offset..];
@@ -56,7 +58,10 @@ pub const Coverage = struct {
         if (try int(u16, subtable, 0) == 12) {
             for (0..try int(u32, subtable, 12)) |i| {
                 const group = 16 + i * 12;
-                try ranges.append(gpa, .{ try int(u32, subtable, group), try int(u32, subtable, group + 4) });
+                try ranges.append(gpa, .{
+                    try int(u32, subtable, group),
+                    try int(u32, subtable, group + 4),
+                });
             }
         } else {
             const count = try int(u16, subtable, 6) / 2;
@@ -66,7 +71,10 @@ pub const Coverage = struct {
                 const last = try int(u16, subtable, ends + i * 2);
                 // The table closes with a segment for this code alone.
                 if (last == 0xffff) break;
-                try ranges.append(gpa, .{ try int(u16, subtable, starts + i * 2), last });
+                try ranges.append(gpa, .{
+                    try int(u16, subtable, starts + i * 2),
+                    last,
+                });
             }
         }
         return .{ .ranges = try ranges.toOwnedSlice(gpa) };

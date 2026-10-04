@@ -66,7 +66,9 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
         pub fn measureAll(list: Self, rows: anytype, c: Constraint) Extent {
             var size: Extent = .{};
             for (rows.items, 0..) |*row, i| {
-                const row_size = pass.measure(row, .{ .max = .{ .width = c.max.width, .height = types.inf } });
+                const row_size = pass.measure(row, .{
+                    .max = .{ .width = c.max.width, .height = types.inf },
+                });
                 size.width = @max(size.width, row_size.width);
                 size.height += row_size.height + if (i == 0) 0 else list.spacing;
             }

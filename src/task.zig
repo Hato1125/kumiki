@@ -34,7 +34,12 @@ pub const Tasks = struct {
     wake: *const fn (*anyopaque) void,
 
     // Runs `work(args...)` on a new thread.
-    pub fn spawn(tasks: *Tasks, tag: u32, comptime work: anytype, args: std.meta.ArgsTuple(@TypeOf(work))) void {
+    pub fn spawn(
+        tasks: *Tasks,
+        tag: u32,
+        comptime work: anytype,
+        args: std.meta.ArgsTuple(@TypeOf(work)),
+    ) void {
         const Job = struct {
             task: Task,
             tasks: *Tasks,
@@ -44,7 +49,9 @@ pub const Tasks = struct {
             fn run(job: *@This()) void {
                 job.result = @call(.auto, work, job.args);
                 job.task.done.store(true, .release);
-                if (job.tasks.waker.load(.acquire)) |waker| job.tasks.wake(waker);
+                if (job.tasks.waker.load(.acquire)) |waker| {
+                    job.tasks.wake(waker);
+                }
             }
 
             fn destroy(task: *Task, gpa: std.mem.Allocator) void {
@@ -52,13 +59,17 @@ pub const Tasks = struct {
             }
         };
         const job = tasks.gpa.create(Job) catch @panic("out of memory");
-        job.* = .{ .tasks = tasks, .args = args, .task = .{
-            .next = tasks.first,
-            .tag = tag,
-            .key = keyOf(@TypeOf(job.result)),
-            .result = @ptrCast(&job.result),
-            .destroy = Job.destroy,
-        } };
+        job.* = .{
+            .tasks = tasks,
+            .args = args,
+            .task = .{
+                .next = tasks.first,
+                .tag = tag,
+                .key = keyOf(@TypeOf(job.result)),
+                .result = @ptrCast(&job.result),
+                .destroy = Job.destroy,
+            },
+        };
         job.task.thread = std.Thread.spawn(.{}, Job.run, .{job}) catch @panic("cannot start a thread");
         tasks.first = &job.task;
     }

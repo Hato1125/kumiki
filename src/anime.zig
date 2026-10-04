@@ -35,7 +35,11 @@ fn bezierAt(p: [4]f32, t: f32) f32 {
     var high: f32 = 1;
     for (0..24) |_| {
         const middle = (low + high) / 2;
-        if (bezierCoordinate(p[0], p[2], middle) < t) low = middle else high = middle;
+        if (bezierCoordinate(p[0], p[2], middle) < t) {
+            low = middle;
+        } else {
+            high = middle;
+        }
     }
     return bezierCoordinate(p[1], p[3], (low + high) / 2);
 }
@@ -142,7 +146,9 @@ pub fn same(comptime T: type, a: T, b: T) bool {
         },
         .@"struct" => |s| {
             inline for (s.fields) |f| {
-                if (!f.is_comptime and !same(f.type, @field(a, f.name), @field(b, f.name))) return false;
+                if (!f.is_comptime and !same(f.type, @field(a, f.name), @field(b, f.name))) {
+                    return false;
+                }
             }
             return true;
         },
@@ -164,7 +170,9 @@ pub fn same(comptime T: type, a: T, b: T) bool {
 // struct that declares `lerp(a, b, t)` is interpolated by it instead of
 // field by field.
 pub fn lerp(comptime T: type, a: T, b: T, t: f32) T {
-    if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "lerp")) return T.lerp(a, b, t);
+    if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "lerp")) {
+        return T.lerp(a, b, t);
+    }
     switch (@typeInfo(T)) {
         .float => return a + (b - a) * @as(T, @floatCast(t)),
         .int => {
@@ -176,7 +184,9 @@ pub fn lerp(comptime T: type, a: T, b: T, t: f32) T {
         .@"struct" => |s| {
             var r: T = b;
             inline for (s.fields) |f| {
-                if (!f.is_comptime) @field(r, f.name) = lerp(f.type, @field(a, f.name), @field(b, f.name), t);
+                if (!f.is_comptime) {
+                    @field(r, f.name) = lerp(f.type, @field(a, f.name), @field(b, f.name), t);
+                }
             }
             return r;
         },

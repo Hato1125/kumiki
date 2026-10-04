@@ -24,14 +24,19 @@ fn isAnimated(comptime View: type) bool {
 fn provided(comptime View: type, inner: anytype, state: *State) Provided(View) {
     comptime for (@typeInfo(@TypeOf(View.provide)).@"fn".params) |param| {
         if (call.Pointee(param.type.?) == Provided(View)) {
-            @compileError("the provide of " ++ @typeName(View) ++ " receives the type it provides");
+            @compileError("the provide of " ++ @typeName(View) ++
+                " receives the type it provides");
         }
     };
     return invoke(View.provide, inner, state, {});
 }
 
 // What a view stands for: the result of its function for a `show`.
-fn resolve(value: anytype, state: *State, owners: anytype) Resolved(@TypeOf(value)) {
+fn resolve(
+    value: anytype,
+    state: *State,
+    owners: anytype,
+) Resolved(@TypeOf(value)) {
     const View = @TypeOf(value);
     return if (comptime isShow(View)) invoke(View.func, owners, state, {}) else value;
 }
@@ -44,9 +49,16 @@ fn resolve(value: anytype, state: *State, owners: anytype) Resolved(@TypeOf(valu
 // its node enters and leaves the tree, and their parameters are filled in by
 // type, as described at `invoke` in call.zig. `pub fn provide` runs after
 // `mount` and whenever the component is built again.
-pub fn mount(node: anytype, value: anytype, state: *State, owners: anytype) void {
+pub fn mount(
+    node: anytype,
+    value: anytype,
+    state: *State,
+    owners: anytype,
+) void {
     const View = @TypeOf(value);
-    if (comptime isShow(View)) return mount(node, resolve(value, state, owners), state, owners);
+    if (comptime isShow(View)) {
+        return mount(node, resolve(value, state, owners), state, owners);
+    }
 
     state.next_id += 1;
     node.id = state.next_id;
@@ -57,7 +69,9 @@ pub fn mount(node: anytype, value: anytype, state: *State, owners: anytype) void
         node.dirty = false;
         node.arena = .init;
         const inner = owners ++ .{node};
-        if (comptime @hasDecl(View, "mount")) invoke(View.mount, inner, state, {});
+        if (comptime @hasDecl(View, "mount")) {
+            invoke(View.mount, inner, state, {});
+        }
         if (comptime provides(View)) node.given = provided(View, inner, state);
         mount(&node.children[0], View.view, state, inner);
     } else if (comptime isList(View)) {
@@ -72,11 +86,15 @@ pub fn mount(node: anytype, value: anytype, state: *State, owners: anytype) void
         mount(&node.children[0], target, state, owners);
     } else {
         node.widget = value.config;
-        if (comptime node_zig.handles(@TypeOf(value.config), .input)) state.inputs += 1;
+        if (comptime node_zig.handles(@TypeOf(value.config), .input)) {
+            state.inputs += 1;
+        }
         if (comptime @hasDecl(@TypeOf(value.config), "cond")) {
             node.widget.active = invoke(@TypeOf(value.config).cond, owners, state, {});
         }
-        inline for (0..value.children.len) |i| mount(&node.children[i], value.children[i], state, owners);
+        inline for (0..value.children.len) |i| {
+            mount(&node.children[i], value.children[i], state, owners);
+        }
     }
 }
 
@@ -86,7 +104,9 @@ pub fn destroy(node: anytype, state: *State, owners: anytype) void {
     _ = each(node, .all, destroy, .{ state, inner });
     if (comptime node_zig.handles(Widget, .input)) state.inputs -= 1;
     if (comptime isComponent(Widget)) {
-        if (comptime @hasDecl(Widget, "unmount")) invoke(Widget.unmount, inner, state, {});
+        if (comptime @hasDecl(Widget, "unmount")) {
+            invoke(Widget.unmount, inner, state, {});
+        }
         node.arena.promote(state.gpa).deinit();
     } else if (comptime isList(Widget)) {
         node.children.deinit(state.gpa);
@@ -103,9 +123,17 @@ const Origin = enum { view, function };
 // left alone, because storing it again would erase the state in its fields.
 // One returned by a function is built again unless it is identical, slices
 // compared by where they point: what it shows may point at older strings.
-fn apply(node: anytype, value: anytype, state: *State, owners: anytype, comptime origin: Origin) void {
+fn apply(
+    node: anytype,
+    value: anytype,
+    state: *State,
+    owners: anytype,
+    comptime origin: Origin,
+) void {
     const View = @TypeOf(value);
-    if (comptime isShow(View)) return apply(node, resolve(value, state, owners), state, owners, .function);
+    if (comptime isShow(View)) {
+        return apply(node, resolve(value, state, owners), state, owners, .function);
+    }
 
     if (comptime isComponent(View)) {
         if (origin == .view) return;
@@ -133,7 +161,9 @@ fn apply(node: anytype, value: anytype, state: *State, owners: anytype, comptime
         } else if (origin == .function) {
             node.widget = value.config;
         }
-        inline for (0..value.children.len) |i| apply(&node.children[i], value.children[i], state, owners, origin);
+        inline for (0..value.children.len) |i| {
+            apply(&node.children[i], value.children[i], state, owners, origin);
+        }
     }
 }
 
@@ -155,7 +185,9 @@ pub fn rebuild(node: anytype, state: *State, owners: anytype) void {
             // built again too.
             if (comptime provides(Widget)) {
                 const next = provided(Widget, inner, state);
-                if (!same(Provided(Widget), next, node.given)) markAll(&node.children[0]);
+                if (!same(Provided(Widget), next, node.given)) {
+                    markAll(&node.children[0]);
+                }
                 node.given = next;
             }
             apply(&node.children[0], Widget.view, state, inner, .view);
@@ -183,7 +215,11 @@ pub fn markAll(node: anytype) void {
 }
 
 // Marks the components that entered or left the path.
-pub fn markChanged(node: anytype, before: []const node_zig.NodeId, after: []const node_zig.NodeId) void {
+pub fn markChanged(
+    node: anytype,
+    before: []const node_zig.NodeId,
+    after: []const node_zig.NodeId,
+) void {
     const was = contains(before, node.id);
     const is = contains(after, node.id);
     if (!was and !is) return;
@@ -201,7 +237,9 @@ pub fn markTargets(comptime f: anytype, owners: anytype) void {
     inline for (@typeInfo(@TypeOf(f)).@"fn".params) |param| {
         const P = param.type.?;
         if (comptime @typeInfo(P) == .pointer and !@typeInfo(P).pointer.is_const) {
-            if (comptime call.find(@TypeOf(owners), P)) |from| markAll(owners[from.owner]);
+            if (comptime call.find(@TypeOf(owners), P)) |from| {
+                markAll(owners[from.owner]);
+            }
         }
     }
 }
@@ -214,18 +252,27 @@ fn syncList(node: anytype, state: *State, owners: anytype) void {
 
     const rows = &node.children;
     const kept = @min(elements.len, rows.items.len);
-    for (rows.items[0..kept], 0..) |*row, i| apply(row, List.item(elements, i), state, owners, .function);
+    for (rows.items[0..kept], 0..) |*row, i| {
+        apply(row, List.item(elements, i), state, owners, .function);
+    }
     for (rows.items[kept..]) |*row| destroy(row, state, owners);
     rows.shrinkRetainingCapacity(kept);
     rows.ensureTotalCapacity(state.gpa, elements.len) catch @panic("out of memory");
-    for (kept..elements.len) |i| mount(rows.addOneAssumeCapacity(), List.item(elements, i), state, owners);
+    for (kept..elements.len) |i| {
+        mount(rows.addOneAssumeCapacity(), List.item(elements, i), state, owners);
+    }
 }
 
 // Rows follow the `id` of their elements, so moving or removing an element
 // keeps the focus and the state of the other rows. Rows mostly keep their
 // order, so the search for a row starts after the last match. A row that was
 // taken gives up its id.
-fn syncKeyed(node: anytype, elements: anytype, state: *State, owners: anytype) void {
+fn syncKeyed(
+    node: anytype,
+    elements: anytype,
+    state: *State,
+    owners: anytype,
+) void {
     const List = @TypeOf(node.widget);
     var old_rows = node.children;
     var old_keys = node.widget.keys;
@@ -244,7 +291,9 @@ fn syncKeyed(node: anytype, elements: anytype, state: *State, owners: anytype) v
         const row = rows.addOneAssumeCapacity();
         const found = for (0..old_rows.items.len) |n| {
             const j = (next + n) % old_rows.items.len;
-            if (old_rows.items[j].id != 0 and List.sameKey(old_keys.items[j], element.id)) break j;
+            if (old_rows.items[j].id != 0 and List.sameKey(old_keys.items[j], element.id)) {
+                break j;
+            }
         } else null;
 
         if (found) |j| {

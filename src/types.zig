@@ -35,7 +35,12 @@ pub const Color = struct {
         const weight_a = @as(f32, @floatFromInt(a.a)) * (1 - progress);
         const weight_b = @as(f32, @floatFromInt(b.a)) * progress;
         const alpha = weight_a + weight_b;
-        if (alpha == 0) return .{ .r = b.r, .g = b.g, .b = b.b, .a = 0 };
+        if (alpha == 0) return .{
+            .r = b.r,
+            .g = b.g,
+            .b = b.b,
+            .a = 0,
+        };
         return .{
             .r = weighted(a.r, b.r, weight_a, weight_b),
             .g = weighted(a.g, b.g, weight_a, weight_b),
@@ -79,8 +84,14 @@ pub const Constraint = struct {
 
     pub fn deflate(c: Constraint, dx: f32, dy: f32) Constraint {
         return .{
-            .min = .{ .width = @max(0, c.min.width - dx), .height = @max(0, c.min.height - dy) },
-            .max = .{ .width = @max(0, c.max.width - dx), .height = @max(0, c.max.height - dy) },
+            .min = .{
+                .width = @max(0, c.min.width - dx),
+                .height = @max(0, c.min.height - dy),
+            },
+            .max = .{
+                .width = @max(0, c.max.width - dx),
+                .height = @max(0, c.max.height - dy),
+            },
         };
     }
 };

@@ -178,13 +178,20 @@ pub const Order = enum { all, shown, front };
 // Calls `f(child, args...)` for the children of `node` until a call returns
 // true. `shown` leaves out the side of a `when` that is not on display, and
 // `front` also starts from the child in front.
-pub fn each(node: anytype, comptime order: Order, comptime f: anytype, args: anytype) bool {
+pub fn each(
+    node: anytype,
+    comptime order: Order,
+    comptime f: anytype,
+    args: anytype,
+) bool {
     const children = &node.children;
     if (comptime @TypeOf(children.*) == void) return false;
     if (comptime @hasField(@TypeOf(children.*), "items")) {
         for (0..children.items.len) |n| {
             const i = if (order == .front) children.items.len - 1 - n else n;
-            if (stops(@call(.auto, f, .{&children.items[i]} ++ args))) return true;
+            if (stops(@call(.auto, f, .{&children.items[i]} ++ args))) {
+                return true;
+            }
         }
         return false;
     }

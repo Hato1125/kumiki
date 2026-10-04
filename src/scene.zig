@@ -25,12 +25,17 @@ const tree = @import("tree.zig");
 // `copy(text)` puts text into the clipboard and returns whether it took it,
 // and `paste(allocator)` returns a copy of what it holds, or null.
 pub fn Scene(comptime Impl: type, comptime Root: type) type {
-    if (!node_zig.isComponent(Root)) @compileError("the root must be a component with a view");
+    if (!node_zig.isComponent(Root)) {
+        @compileError("the root must be a component with a view");
+    }
     inline for (.{
         "Options", "init", "deinit", "next",  "size", "now",
         "begin",   "end",  "wake",   "input", "copy", "paste",
     }) |name| {
-        if (!@hasDecl(Impl, name)) @compileError(@typeName(Impl) ++ " is no implementation: it lacks " ++ name);
+        if (!@hasDecl(Impl, name)) {
+            @compileError(@typeName(Impl) ++
+                " is no implementation: it lacks " ++ name);
+        }
     }
 
     return struct {
@@ -54,13 +59,25 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // The scene keeps the only copy of `root` that stays up to date, so
         // what the root allocates is freed by its `unmount`, not by the
         // caller.
-        pub fn init(gpa: std.mem.Allocator, options: Impl.Options, root: Root) !Self {
+        pub fn init(
+            gpa: std.mem.Allocator,
+            options: Impl.Options,
+            root: Root,
+        ) !Self {
             const tasks = gpa.create(Tasks) catch @panic("out of memory");
             errdefer gpa.destroy(tasks);
             tasks.* = .{ .gpa = gpa, .wake = wake };
             var s: Self = .{
                 .impl = try Impl.init(gpa, options),
-                .state = .{ .gpa = gpa, .tasks = tasks, .host = .{ .impl = undefined, .paste = paste, .copy = copy } },
+                .state = .{
+                    .gpa = gpa,
+                    .tasks = tasks,
+                    .host = .{
+                        .impl = undefined,
+                        .paste = paste,
+                        .copy = copy,
+                    },
+                },
                 .root = undefined,
             };
             s.state.host.impl = &s.impl;
@@ -123,7 +140,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .button => |button| s.pressButton(button),
                     .wheel => |wheel| {
                         s.hoverAt(wheel.at);
-                        if (s.state.hover.id() != 0) _ = s.offer(s.state.hover.id(), .{ .wheel = wheel });
+                        if (s.state.hover.id() != 0) {
+                            _ = s.offer(s.state.hover.id(), .{ .wheel = wheel });
+                        }
                     },
                     .key => |press| s.pressKey(press),
                     .text => |text| if (s.state.focus.id() != 0) {
@@ -155,7 +174,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             while (s.state.tasks.take()) |task| {
                 var handled = false;
                 const found = input.deliver(&s.root, task.tag, task, .{}, &s.state, &handled);
-                if (found and !handled) @panic("no component receives the result of a background function");
+                if (found and !handled) {
+                    @panic("no component receives the result of a background function");
+                }
                 if (handled) s.pending = true;
                 task.destroy(task, s.state.gpa);
             }
@@ -174,7 +195,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             tree.rebuild(&s.root, state, .{});
 
             if (state.stale) {
-                inline for (.{ &state.focus, &state.hover, &state.press }) |path| s.move(path, s.pathTo(path.id()));
+                inline for (.{ &state.focus, &state.hover, &state.press }) |path| {
+                    s.move(path, s.pathTo(path.id()));
+                }
                 if (s.pathTo(s.held).id() == 0) s.held = 0;
             }
             if (state.built or !std.meta.eql(size, s.size)) {
@@ -194,9 +217,13 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         fn retype(s: *Self) void {
             var found: input.Typing = .{};
             const focus = s.state.focus.id();
-            if (s.state.active and focus != 0) _ = input.typingArea(&s.root, focus, &found);
+            if (s.state.active and focus != 0) {
+                _ = input.typingArea(&s.root, focus, &found);
+            }
             if (found.target != s.typing and s.typing != 0) {
-                _ = s.offer(s.typing, .{ .text = .{ .text = "", .composing = true } });
+                _ = s.offer(s.typing, .{
+                    .text = .{ .text = "", .composing = true },
+                });
                 if (s.state.typing != null) s.impl.input(null);
                 s.state.typing = null;
             }
@@ -242,7 +269,11 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // Tells the view that holds the pointer what the pointer does.
         fn hold(s: *Self, phase: @FieldType(input.Pointer, "phase")) void {
             if (s.held == 0) return;
-            _ = s.offer(s.held, .{ .pointer = .{ .phase = phase, .x = s.last.x, .y = s.last.y } });
+            _ = s.offer(s.held, .{ .pointer = .{
+                .phase = phase,
+                .x = s.last.x,
+                .y = s.last.y,
+            } });
         }
 
         // Without the keyboard nothing has the focus, so what shows the
@@ -272,7 +303,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 s.setKeyboard(false);
                 var found: input.Nearest = .{};
                 _ = input.nearest(&s.root, state.hover.id(), &found);
-                if (found.focusable != 0) s.move(&state.focus, state.hover.from(found.focusable));
+                if (found.focusable != 0) {
+                    s.move(&state.focus, state.hover.from(found.focusable));
+                }
                 s.held = if (state.hover.id() == 0) 0 else s.offer(state.hover.id(), .{ .pointer = .{
                     .phase = .down,
                     .x = button.x,
@@ -280,7 +313,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .clicks = button.clicks,
                     .mod = button.mod,
                 } });
-                if (s.held == 0) s.move(&state.press, state.hover.from(found.tap));
+                if (s.held == 0) {
+                    s.move(&state.press, state.hover.from(found.tap));
+                }
                 return;
             }
 
@@ -291,7 +326,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             }
             const target = state.press.id();
             s.move(&state.press, .{});
-            if (target != 0 and node_zig.contains(state.hover.slice(), target)) _ = s.offer(target, .click);
+            if (target != 0 and node_zig.contains(state.hover.slice(), target)) {
+                _ = s.offer(target, .click);
+            }
         }
 
         // Keys go to the focus first. Tab and Escape move it when nothing
@@ -299,7 +336,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         fn pressKey(s: *Self, press: input.KeyPress) void {
             const state = &s.state;
             if (press.down and !press.isModifier()) s.setKeyboard(true);
-            if (state.focus.id() != 0 and s.offer(state.focus.id(), .{ .key = press }) != 0) return;
+            if (state.focus.id() != 0 and s.offer(state.focus.id(), .{ .key = press }) != 0) {
+                return;
+            }
             if (!press.down) return;
 
             if (press.key == keys.tab) {

@@ -54,7 +54,10 @@ pub fn addFont(path: [:0]const u8) !void {
     if (c.tvg_font_load(path) != c.TVG_RESULT_SUCCESS) return error.FontLoad;
     const kept = try gpa.dupeZ(u8, path);
     errdefer gpa.free(kept);
-    try loaded_fonts.append(gpa, .{ .name = std.fs.path.stem(kept), .path = kept });
+    try loaded_fonts.append(gpa, .{
+        .name = std.fs.path.stem(kept),
+        .path = kept,
+    });
 }
 
 fn readFile(path: [:0]const u8) ![]u8 {
@@ -83,7 +86,9 @@ fn readCoverage(path: [:0]const u8) !Coverage {
 fn coverageOf(name: []const u8) Coverage {
     for (loaded_fonts.items) |*font| {
         if (!std.mem.eql(u8, font.name, name)) continue;
-        if (font.coverage == null) font.coverage = readCoverage(font.path) catch .{};
+        if (font.coverage == null) {
+            font.coverage = readCoverage(font.path) catch .{};
+        }
         return font.coverage.?;
     }
     return .{};
@@ -176,7 +181,11 @@ pub fn measureText(s: []const u8, style: TextStyle, width: f32) Extent {
     if (Rulers.mixing(s, style)) |rulers| {
         defer rulers.deinit();
         var size: Extent = .{};
-        var lines: LineIterator = .{ .rest = s, .width = width, .rulers = &rulers };
+        var lines: LineIterator = .{
+            .rest = s,
+            .width = width,
+            .rulers = &rulers,
+        };
         while (lines.next()) |line| {
             size.width = @max(size.width, rulers.lineWidth(line));
             size.height += rulers.lineHeight();
@@ -193,7 +202,10 @@ pub fn measureText(s: []const u8, style: TextStyle, width: f32) Extent {
     if (s.len == 0) return .{ .height = height };
 
     const natural = inkWidth(text);
-    return .{ .width = if (width > 0) @min(natural, width) else natural, .height = height };
+    return .{
+        .width = if (width > 0) @min(natural, width) else natural,
+        .height = height,
+    };
 }
 
 // Measures how far texts in one style advance. The advance is read off the
@@ -212,7 +224,11 @@ const Ruler = struct {
         var plain = style;
         plain.tracking = 0;
         const text = newText(bar, plain, 0);
-        return .{ .text = text, .alone = inkWidth(text), .tracking = style.tracking };
+        return .{
+            .text = text,
+            .alone = inkWidth(text),
+            .tracking = style.tracking,
+        };
     }
 
     fn deinit(ruler: Ruler) void {
@@ -282,7 +298,11 @@ const Rulers = struct {
 
     fn init(style: TextStyle) Rulers {
         const main: Ruler = .init(style);
-        var rulers: Rulers = .{ .main = main, .metrics = metricsOf(main.text), .line_height = style.line_height };
+        var rulers: Rulers = .{
+            .main = main,
+            .metrics = metricsOf(main.text),
+            .line_height = style.line_height,
+        };
         const name = style.font orelse default_font orelse return rulers;
         if (style.fallback == null) return rulers;
         rulers.fallback = .init(style.falling());
@@ -397,7 +417,9 @@ const LineIterator = struct {
         while (end < s.len) {
             const code_point, const length = firstCodePoint(s[end..]);
             if (code_point == '\n') break;
-            if (breaksAnywhere(code_point)) return s[0..if (end == 0) length else end];
+            if (breaksAnywhere(code_point)) {
+                return s[0..if (end == 0) length else end];
+            }
             if (code_point == ' ') spaces = true else if (spaces) break;
             end += length;
         }
@@ -456,7 +478,9 @@ pub const Image = struct {
         const picture = c.tvg_picture_new();
         _ = c.tvg_paint_ref(picture);
         errdefer _ = c.tvg_paint_unref(picture, true);
-        if (c.tvg_picture_load(picture, path) != c.TVG_RESULT_SUCCESS) return error.ImageLoad;
+        if (c.tvg_picture_load(picture, path) != c.TVG_RESULT_SUCCESS) {
+            return error.ImageLoad;
+        }
         return .{ .picture = picture };
     }
 
@@ -479,7 +503,12 @@ pub const Corners = struct {
     bottom_left: f32 = 0,
 
     pub fn all(radius: f32) Corners {
-        return .{ .top_left = radius, .top_right = radius, .bottom_right = radius, .bottom_left = radius };
+        return .{
+            .top_left = radius,
+            .top_right = radius,
+            .bottom_right = radius,
+            .bottom_left = radius,
+        };
     }
 };
 
@@ -504,7 +533,15 @@ pub const Path = struct {
         _ = c.tvg_shape_line_to(p.shape, x, y);
     }
 
-    pub fn cubicTo(p: Path, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) void {
+    pub fn cubicTo(
+        p: Path,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        x: f32,
+        y: f32,
+    ) void {
         _ = c.tvg_shape_cubic_to(p.shape, x1, y1, x2, y2, x, y);
     }
 
@@ -569,7 +606,12 @@ pub const Canvas = struct {
         const tvg = c.tvg_glcanvas_create(c.TVG_ENGINE_OPTION_DEFAULT) orelse return error.CanvasCreate;
         errdefer _ = c.tvg_canvas_destroy(tvg);
 
-        var canvas: Canvas = .{ .tvg = tvg, .gl = gl_context, .width = 0, .height = 0 };
+        var canvas: Canvas = .{
+            .tvg = tvg,
+            .gl = gl_context,
+            .width = 0,
+            .height = 0,
+        };
         try canvas.resize(width, height);
         return canvas;
     }
@@ -592,16 +634,29 @@ pub const Canvas = struct {
 
     pub fn begin(canvas: *Canvas) !void {
         canvas.depth = 0;
-        if (c.tvg_canvas_remove(canvas.tvg, null) != c.TVG_RESULT_SUCCESS) return error.Draw;
+        if (c.tvg_canvas_remove(canvas.tvg, null) != c.TVG_RESULT_SUCCESS) {
+            return error.Draw;
+        }
     }
 
     pub fn end(canvas: *Canvas) !void {
-        if (c.tvg_canvas_update(canvas.tvg) != c.TVG_RESULT_SUCCESS) return error.Draw;
-        if (c.tvg_canvas_draw(canvas.tvg, true) != c.TVG_RESULT_SUCCESS) return error.Draw;
-        if (c.tvg_canvas_sync(canvas.tvg) != c.TVG_RESULT_SUCCESS) return error.Draw;
+        if (c.tvg_canvas_update(canvas.tvg) != c.TVG_RESULT_SUCCESS) {
+            return error.Draw;
+        }
+        if (c.tvg_canvas_draw(canvas.tvg, true) != c.TVG_RESULT_SUCCESS) {
+            return error.Draw;
+        }
+        if (c.tvg_canvas_sync(canvas.tvg) != c.TVG_RESULT_SUCCESS) {
+            return error.Draw;
+        }
     }
 
-    pub fn fillRect(canvas: *Canvas, r: Bounds, radius: f32, color: Color) void {
+    pub fn fillRect(
+        canvas: *Canvas,
+        r: Bounds,
+        radius: f32,
+        color: Color,
+    ) void {
         if (color.a == 0) return;
         const shape = canvas.roundedRect(r, radius);
         _ = c.tvg_shape_set_fill_color(shape, color.r, color.g, color.b, color.a);
@@ -609,17 +664,34 @@ pub const Canvas = struct {
     }
 
     // The stroke is kept inside `r`.
-    pub fn strokeRect(canvas: *Canvas, r: Bounds, radius: f32, width: f32, color: Color) void {
+    pub fn strokeRect(
+        canvas: *Canvas,
+        r: Bounds,
+        radius: f32,
+        width: f32,
+        color: Color,
+    ) void {
         if (color.a == 0 or width <= 0) return;
         const half = width / 2;
-        const inner: Bounds = .{ .x = r.x + half, .y = r.y + half, .w = r.w - width, .h = r.h - width };
+        const inner: Bounds = .{
+            .x = r.x + half,
+            .y = r.y + half,
+            .w = r.w - width,
+            .h = r.h - width,
+        };
         const shape = canvas.roundedRect(inner, @max(0, radius - half));
         _ = c.tvg_shape_set_stroke_width(shape, width * canvas.scale);
         _ = c.tvg_shape_set_stroke_color(shape, color.r, color.g, color.b, color.a);
         canvas.add(shape);
     }
 
-    pub fn fillCircle(canvas: *Canvas, cx: f32, cy: f32, radius: f32, color: Color) void {
+    pub fn fillCircle(
+        canvas: *Canvas,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        color: Color,
+    ) void {
         if (color.a == 0) return;
         const circle = canvas.path();
         circle.circle(cx, cy, radius);
@@ -630,7 +702,15 @@ pub const Canvas = struct {
     // Draws with (x, y) at the top left of the first line. A positive
     // `width` wraps the text at that width. The glyphs sit in the middle of
     // a line taller or shorter than the font's own.
-    pub fn text(canvas: *Canvas, x: f32, y: f32, width: f32, s: []const u8, style: TextStyle, color: Color) void {
+    pub fn text(
+        canvas: *Canvas,
+        x: f32,
+        y: f32,
+        width: f32,
+        s: []const u8,
+        style: TextStyle,
+        color: Color,
+    ) void {
         if (s.len == 0 or color.a == 0) return;
         if (Rulers.mixing(s, style)) |rulers| {
             defer rulers.deinit();
@@ -659,7 +739,11 @@ pub const Canvas = struct {
         const fallback = main.falling();
 
         var top = y + (rulers.lineHeight() - rulers.metrics.advance) / 2;
-        var lines: LineIterator = .{ .rest = s, .width = width, .rulers = rulers };
+        var lines: LineIterator = .{
+            .rest = s,
+            .width = width,
+            .rulers = rulers,
+        };
         while (lines.next()) |line| : (top += rulers.lineHeight()) {
             var left = x;
             var runs = rulers.runs(line);
@@ -672,7 +756,13 @@ pub const Canvas = struct {
         }
     }
 
-    fn addText(canvas: *Canvas, paint: c.Tvg_Paint, x: f32, y: f32, color: Color) void {
+    fn addText(
+        canvas: *Canvas,
+        paint: c.Tvg_Paint,
+        x: f32,
+        y: f32,
+        color: Color,
+    ) void {
         _ = c.tvg_text_set_color(paint, color.r, color.g, color.b);
         _ = c.tvg_paint_set_opacity(paint, color.a);
         _ = c.tvg_paint_translate(paint, x * canvas.scale, y * canvas.scale);
@@ -738,15 +828,24 @@ pub const Canvas = struct {
 
     // Collects the following drawing into a layer for popLayer or popBlurred.
     pub fn pushLayer(canvas: *Canvas) void {
-        if (canvas.depth == canvas.layers.len) @panic("layers nested too deeply");
+        if (canvas.depth == canvas.layers.len) {
+            @panic("layers nested too deeply");
+        }
         canvas.layers[canvas.depth] = c.tvg_scene_new();
         canvas.depth += 1;
     }
 
-    pub fn popLayer(canvas: *Canvas, clip: ?Bounds, radius: f32, opacity: u8) void {
+    pub fn popLayer(
+        canvas: *Canvas,
+        clip: ?Bounds,
+        radius: f32,
+        opacity: u8,
+    ) void {
         canvas.depth -= 1;
         const layer = canvas.layers[canvas.depth];
-        if (clip) |r| _ = c.tvg_paint_set_clip(layer, canvas.roundedRect(r, radius));
+        if (clip) |r| {
+            _ = c.tvg_paint_set_clip(layer, canvas.roundedRect(r, radius));
+        }
         if (opacity < 255) _ = c.tvg_paint_set_opacity(layer, opacity);
         canvas.add(layer);
     }
@@ -756,7 +855,9 @@ pub const Canvas = struct {
     pub fn popBlurred(canvas: *Canvas, sigma: f32) void {
         canvas.depth -= 1;
         const layer = canvas.layers[canvas.depth];
-        if (sigma > 0) _ = c.tvg_scene_add_effect_gaussian_blur(layer, sigma * canvas.scale, 0, 0, blur_quality);
+        if (sigma > 0) {
+            _ = c.tvg_scene_add_effect_gaussian_blur(layer, sigma * canvas.scale, 0, 0, blur_quality);
+        }
         canvas.add(layer);
     }
 

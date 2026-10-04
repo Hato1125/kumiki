@@ -24,8 +24,15 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
 
         const Self = @This();
 
-        fn set(self: Self, comptime setting: []const u8, value: @FieldType(Config, setting)) Self {
-            return .{ .children = self.children, .config = mod.set(self.config, setting, value) };
+        fn set(
+            self: Self,
+            comptime setting: []const u8,
+            value: @FieldType(Config, setting),
+        ) Self {
+            return .{
+                .children = self.children,
+                .config = mod.set(self.config, setting, value),
+            };
         }
 
         // The settings of rows, columns and stacks. A declaration is
@@ -64,7 +71,11 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
 }
 
 // A copy of `view` with one field changed.
-pub fn set(view: anytype, comptime field: []const u8, value: @FieldType(@TypeOf(view), field)) @TypeOf(view) {
+pub fn set(
+    view: anytype,
+    comptime field: []const u8,
+    value: @FieldType(@TypeOf(view), field),
+) @TypeOf(view) {
     var next = view;
     @field(next, field) = value;
     return next;
@@ -91,7 +102,10 @@ fn Wrapped(comptime Self: type, comptime Config: type) type {
 // `layout(config, child, position, size) void`,
 // `beginPaint(config, painter) void` and `endPaint(config, painter) void`.
 // Without them the view keeps the size and the position of its child.
-pub fn with(self: anytype, config: anytype) Wrapped(@TypeOf(self), @TypeOf(config)) {
+pub fn with(
+    self: anytype,
+    config: anytype,
+) Wrapped(@TypeOf(self), @TypeOf(config)) {
     return .{ .children = .{base(self)}, .config = config };
 }
 
@@ -105,7 +119,12 @@ const Insets = struct {
         const Spec = @TypeOf(spec);
         if (Spec == Insets) return spec;
         if (@typeInfo(Spec) != .@"struct") {
-            return .{ .top = float(spec), .right = float(spec), .bottom = float(spec), .left = float(spec) };
+            return .{
+                .top = float(spec),
+                .right = float(spec),
+                .bottom = float(spec),
+                .left = float(spec),
+            };
         }
         var insets: Insets = .{};
         if (@hasField(Spec, "x")) insets.left = float(spec.x);
@@ -113,7 +132,9 @@ const Insets = struct {
         if (@hasField(Spec, "y")) insets.top = float(spec.y);
         if (@hasField(Spec, "y")) insets.bottom = float(spec.y);
         inline for (@typeInfo(Insets).@"struct".fields) |edge| {
-            if (@hasField(Spec, edge.name)) @field(insets, edge.name) = float(@field(spec, edge.name));
+            if (@hasField(Spec, edge.name)) {
+                @field(insets, edge.name) = float(@field(spec, edge.name));
+            }
         }
         return insets;
     }
@@ -130,11 +151,17 @@ const Insets = struct {
         const dx = insets.left + insets.right;
         const dy = insets.top + insets.bottom;
         const size = pass.measure(child, c.deflate(dx, dy));
-        return c.constrain(.{ .width = size.width + dx, .height = size.height + dy });
+        return c.constrain(.{
+            .width = size.width + dx,
+            .height = size.height + dy,
+        });
     }
 
     pub fn layout(insets: Insets, child: anytype, at: Point, _: Extent) void {
-        pass.layout(child, .{ .x = at.x + insets.left, .y = at.y + insets.top });
+        pass.layout(child, .{
+            .x = at.x + insets.left,
+            .y = at.y + insets.top,
+        });
     }
 };
 
@@ -159,7 +186,9 @@ const Frame = struct {
 
     fn outer(fixed: ?f32, max: ?f32, low: f32, high: f32, child: f32) f32 {
         if (fixed) |size| return std.math.clamp(size, low, high);
-        if (max) |size| return if (std.math.isInf(high)) child else @max(child, @min(size, high));
+        if (max) |size| {
+            return if (std.math.isInf(high)) child else @max(child, @min(size, high));
+        }
         return child;
     }
 
@@ -260,18 +289,27 @@ fn Handler(comptime kind: HandlerKind, comptime f: anytype) type {
 
 // Runs `action` on a click, or on Enter or Space while focused. Components
 // that `action` receives as mutable pointers are built again after it runs.
-pub fn tap(self: anytype, comptime action: anytype) Wrapped(@TypeOf(self), Handler(.tap, action)) {
+pub fn tap(
+    self: anytype,
+    comptime action: anytype,
+) Wrapped(@TypeOf(self), Handler(.tap, action)) {
     return with(self, Handler(.tap, action){});
 }
 
 // Offers key presses to `handler`, which returns whether it used the key.
-pub fn key(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Handler(.key, handler)) {
+pub fn key(
+    self: anytype,
+    comptime handler: anytype,
+) Wrapped(@TypeOf(self), Handler(.key, handler)) {
     return with(self, Handler(.key, handler){});
 }
 
 // Offers the turns of the wheel over the view to `handler`, in a ui.Wheel
 // parameter. `handler` returns whether it used the turn.
-pub fn wheel(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Handler(.wheel, handler)) {
+pub fn wheel(
+    self: anytype,
+    comptime handler: anytype,
+) Wrapped(@TypeOf(self), Handler(.wheel, handler)) {
     return with(self, Handler(.wheel, handler){});
 }
 
@@ -280,13 +318,19 @@ pub fn wheel(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Ha
 // holds the pointer: the moves and the release reach it wherever the pointer
 // goes. While the pointer is held outside the view, the last move repeats on
 // every frame, so that the view can scroll after it.
-pub fn pointer(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Handler(.pointer, handler)) {
+pub fn pointer(
+    self: anytype,
+    comptime handler: anytype,
+) Wrapped(@TypeOf(self), Handler(.pointer, handler)) {
     return with(self, Handler(.pointer, handler){});
 }
 
 // Offers the text that is typed while the view, or something inside it, has
 // the focus to `handler`, in a ui.TextInput parameter.
-pub fn input(self: anytype, comptime handler: anytype) Wrapped(@TypeOf(self), Handler(.input, handler)) {
+pub fn input(
+    self: anytype,
+    comptime handler: anytype,
+) Wrapped(@TypeOf(self), Handler(.input, handler)) {
     return with(self, Handler(.input, handler){});
 }
 
@@ -299,7 +343,10 @@ fn Animated(comptime Child: type) type {
 
 // Moves the view from the value it shows to a new one over time whenever it
 // is built with a different value.
-pub fn animation(self: anytype, spec: anim.Animation) Wrapped(@TypeOf(self), Animated(Base(@TypeOf(self)))) {
+pub fn animation(
+    self: anytype,
+    spec: anim.Animation,
+) Wrapped(@TypeOf(self), Animated(Base(@TypeOf(self)))) {
     return with(self, Animated(Base(@TypeOf(self))){ .spec = spec });
 }
 

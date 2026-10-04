@@ -25,7 +25,9 @@ pub const Window = struct {
     };
 
     pub fn init(_: std.mem.Allocator, options: Options) !Window {
-        if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS)) return error.SdlInit;
+        if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS)) {
+            return error.SdlInit;
+        }
         errdefer c.SDL_Quit();
         try canvas_zig.startup(options.font);
         errdefer canvas_zig.shutdown();
@@ -48,7 +50,11 @@ pub const Window = struct {
         _ = c.SDL_GL_SetSwapInterval(1);
 
         const pixels = pixelSize(window);
-        return .{ .window = window, .gl = gl, .canvas = try .init(gl, pixels[0], pixels[1]) };
+        return .{
+            .window = window,
+            .gl = gl,
+            .canvas = try .init(gl, pixels[0], pixels[1]),
+        };
     }
 
     pub fn deinit(w: *Window) void {
@@ -119,7 +125,10 @@ pub const Window = struct {
         var width: c_int = 0;
         var height: c_int = 0;
         _ = c.SDL_GetWindowSize(w.window, &width, &height);
-        return .{ .width = @floatFromInt(width), .height = @floatFromInt(height) };
+        return .{
+            .width = @floatFromInt(width),
+            .height = @floatFromInt(height),
+        };
     }
 
     pub fn now(_: *Window) f64 {
@@ -152,7 +161,10 @@ pub const Window = struct {
     fn convert(event: *const c.SDL_Event) ?Event {
         return switch (event.type) {
             c.SDL_EVENT_QUIT, c.SDL_EVENT_WINDOW_CLOSE_REQUESTED => .close,
-            c.SDL_EVENT_MOUSE_MOTION => .{ .pointer_move = .{ .x = event.motion.x, .y = event.motion.y } },
+            c.SDL_EVENT_MOUSE_MOTION => .{ .pointer_move = .{
+                .x = event.motion.x,
+                .y = event.motion.y,
+            } },
             c.SDL_EVENT_WINDOW_MOUSE_LEAVE => .pointer_leave,
             c.SDL_EVENT_WINDOW_FOCUS_GAINED => .{ .active = true },
             c.SDL_EVENT_WINDOW_FOCUS_LOST => .{ .active = false },
@@ -169,7 +181,9 @@ pub const Window = struct {
                 .y = event.wheel.y,
                 .at = .{ .x = event.wheel.mouse_x, .y = event.wheel.mouse_y },
             } },
-            c.SDL_EVENT_TEXT_INPUT => .{ .text = .{ .text = std.mem.span(event.text.text) } },
+            c.SDL_EVENT_TEXT_INPUT => .{ .text = .{
+                .text = std.mem.span(event.text.text),
+            } },
             c.SDL_EVENT_TEXT_EDITING => .{ .text = .{
                 .text = std.mem.span(event.edit.text),
                 .composing = true,
@@ -205,7 +219,11 @@ fn marked(text: []const u8, start: i32, length: i32) ?types.Range {
 }
 
 // Opens a window showing `root`, a component, and returns when it is closed.
-pub fn run(gpa: std.mem.Allocator, options: Window.Options, root: anytype) !void {
+pub fn run(
+    gpa: std.mem.Allocator,
+    options: Window.Options,
+    root: anytype,
+) !void {
     var scene = try Scene(Window, @TypeOf(root)).init(gpa, options, root);
     defer scene.deinit();
     try scene.run();

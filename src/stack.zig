@@ -37,12 +37,20 @@ pub const Stack = struct {
         var size: Extent = .{};
         inline for (0..children.len) |i| {
             const child = pass.measure(&children[i], c.loosen());
-            size = .{ .width = @max(size.width, child.width), .height = @max(size.height, child.height) };
+            size = .{
+                .width = @max(size.width, child.width),
+                .height = @max(size.height, child.height),
+            };
         }
         return c.constrain(size);
     }
 
-    pub fn layoutAll(s: Stack, children: anytype, at: Point, size: Extent) void {
+    pub fn layoutAll(
+        s: Stack,
+        children: anytype,
+        at: Point,
+        size: Extent,
+    ) void {
         inline for (0..children.len) |i| {
             pass.layout(&children[i], s.alignment.place(at, size, children[i].size));
         }

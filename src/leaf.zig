@@ -68,7 +68,9 @@ pub const Text = struct {
     // Wraps when the text is wider than the space offered.
     pub fn measure(text: Text, c: Constraint) Extent {
         const natural = canvas.measureText(text.content, text.style(), 0);
-        if (std.math.isInf(c.max.width) or natural.width <= c.max.width) return c.constrain(natural);
+        if (std.math.isInf(c.max.width) or natural.width <= c.max.width) {
+            return c.constrain(natural);
+        }
         return c.constrain(canvas.measureText(text.content, text.style(), c.max.width));
     }
 
@@ -159,7 +161,10 @@ pub const Picture = struct {
         });
         if (natural.width <= 0 or natural.height <= 0) return c.min;
         const scale = @min(1, c.max.width / natural.width, c.max.height / natural.height);
-        return c.constrain(.{ .width = natural.width * scale, .height = natural.height * scale });
+        return c.constrain(.{
+            .width = natural.width * scale,
+            .height = natural.height * scale,
+        });
     }
 
     pub fn paint(picture: Picture, p: Painter) void {

@@ -40,7 +40,13 @@ pub fn Flex(comptime axis: Axis) type {
             return f.gap * @as(f32, @floatFromInt(@max(count, 1) - 1));
         }
 
-        fn measureChild(f: Self, child: anytype, c: Constraint, min: f32, max: f32) Extent {
+        fn measureChild(
+            f: Self,
+            child: anytype,
+            c: Constraint,
+            min: f32,
+            max: f32,
+        ) Extent {
             const across = crossOf(c.max);
             const stretched = f.cross == .stretch and !std.math.isInf(across);
             return pass.measure(child, .{
@@ -77,11 +83,18 @@ pub fn Flex(comptime axis: Axis) type {
             }
 
             const fills = (factors > 0 or f.main != .start) and !std.math.isInf(space);
-            if (f.cross == .stretch and !std.math.isInf(crossOf(c.max))) across = crossOf(c.max);
+            if (f.cross == .stretch and !std.math.isInf(crossOf(c.max))) {
+                across = crossOf(c.max);
+            }
             return c.constrain(extent(if (fills) space else used, across));
         }
 
-        pub fn layoutAll(f: Self, children: anytype, at: Point, size: Extent) void {
+        pub fn layoutAll(
+            f: Self,
+            children: anytype,
+            at: Point,
+            size: Extent,
+        ) void {
             var used = f.gaps(children.len);
             inline for (0..children.len) |i| used += mainOf(children[i].size);
 
@@ -104,7 +117,10 @@ pub fn Flex(comptime axis: Axis) type {
                     .end => free,
                 };
                 const offset = extent(along, across);
-                pass.layout(&children[i], .{ .x = at.x + offset.width, .y = at.y + offset.height });
+                pass.layout(&children[i], .{
+                    .x = at.x + offset.width,
+                    .y = at.y + offset.height,
+                });
                 along += mainOf(children[i].size) + step;
             }
         }

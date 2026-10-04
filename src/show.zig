@@ -47,8 +47,17 @@ pub fn When(comptime cond_fn: anytype) type {
             return if (w.active) pass.measure(&children[0], c) else pass.measure(&children[1], c);
         }
 
-        pub fn layoutAll(w: Self, children: anytype, at: Point, _: Extent) void {
-            if (w.active) pass.layout(&children[0], at) else pass.layout(&children[1], at);
+        pub fn layoutAll(
+            w: Self,
+            children: anytype,
+            at: Point,
+            _: Extent,
+        ) void {
+            if (w.active) {
+                pass.layout(&children[0], at);
+            } else {
+                pass.layout(&children[1], at);
+            }
         }
     };
 }

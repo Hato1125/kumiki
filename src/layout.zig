@@ -27,7 +27,9 @@ pub fn measure(node: anytype, c: Constraint) Extent {
 // background, are sized to it.
 fn measureLast(children: anytype, c: Constraint) Extent {
     const size = measure(&children[children.len - 1], c);
-    inline for (0..children.len - 1) |i| _ = measure(&children[i], .tight(size));
+    inline for (0..children.len - 1) |i| {
+        _ = measure(&children[i], .tight(size));
+    }
     return size;
 }
 
@@ -37,8 +39,12 @@ pub fn layout(node: anytype, at: Point) void {
     const children = &node.children;
     if (comptime @TypeOf(node.offset) != void) node.offset = at;
     if (comptime @TypeOf(children.*) == void) return;
-    if (comptime has(Widget, "layoutAll")) return node.widget.layoutAll(children, at, node.size);
-    if (comptime has(Widget, "layout")) return node.widget.layout(&children[children.len - 1], at, node.size);
+    if (comptime has(Widget, "layoutAll")) {
+        return node.widget.layoutAll(children, at, node.size);
+    }
+    if (comptime has(Widget, "layout")) {
+        return node.widget.layout(&children[children.len - 1], at, node.size);
+    }
     _ = each(node, .all, layout, .{at});
 }
 

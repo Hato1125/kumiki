@@ -42,7 +42,11 @@ pub fn pressed(cx: Context) bool {
 // components. What it returns reaches `pub fn receive` of this component, or
 // of the nearest one around it with a parameter of that type, on the thread
 // of the scene. It is dropped when this component is gone by then.
-pub fn spawn(cx: Context, comptime work: anytype, args: std.meta.ArgsTuple(@TypeOf(work))) void {
+pub fn spawn(
+    cx: Context,
+    comptime work: anytype,
+    args: std.meta.ArgsTuple(@TypeOf(work)),
+) void {
     cx.state.tasks.spawn(cx.id, work, args);
 }
 

@@ -70,22 +70,31 @@ pub fn spacer() leaf.Spacer {
     return .{};
 }
 
-pub fn row(children: anytype) mod.Container(Plain(@TypeOf(children)), Flex(.horizontal)) {
+pub fn row(
+    children: anytype,
+) mod.Container(Plain(@TypeOf(children)), Flex(.horizontal)) {
     return .{ .children = children, .config = .{} };
 }
 
-pub fn column(children: anytype) mod.Container(Plain(@TypeOf(children)), Flex(.vertical)) {
+pub fn column(
+    children: anytype,
+) mod.Container(Plain(@TypeOf(children)), Flex(.vertical)) {
     return .{ .children = children, .config = .{} };
 }
 
-pub fn stack(children: anytype) mod.Container(Plain(@TypeOf(children)), Stack) {
+pub fn stack(
+    children: anytype,
+) mod.Container(Plain(@TypeOf(children)), Stack) {
     return .{ .children = children, .config = .{} };
 }
 
 // `source` returns a slice and `make` turns an element, or a pointer to it,
 // into the view of its row. The parameters of `source` are filled in by type
 // like those of `ui.show`.
-pub fn list(comptime source: anytype, comptime make: anytype) List(source, make) {
+pub fn list(
+    comptime source: anytype,
+    comptime make: anytype,
+) List(source, make) {
     return .{};
 }
 
@@ -95,18 +104,30 @@ fn When(comptime cond: anytype, comptime A: type, comptime B: type) type {
 
 // Shows `a` while `cond` returns true and `b` otherwise. The parameters of
 // `cond` are filled in by type like those of `ui.show`.
-pub fn when(comptime cond: anytype, a: anytype, b: anytype) When(cond, @TypeOf(a), @TypeOf(b)) {
+pub fn when(
+    comptime cond: anytype,
+    a: anytype,
+    b: anytype,
+) When(cond, @TypeOf(a), @TypeOf(b)) {
     return .{ .children = .{ a, b }, .config = .{} };
 }
 
-pub fn Each(comptime n: usize, comptime F: anytype, comptime args: anytype) type {
+pub fn Each(
+    comptime n: usize,
+    comptime F: anytype,
+    comptime args: anytype,
+) type {
     var element_types: [n]type = undefined;
     for (0..n) |i| element_types[i] = @call(.auto, F, args ++ .{i});
     return @Tuple(&element_types);
 }
 
 // The tuple `.{ F(args..., 0){}, ..., F(args..., n - 1){} }` of components.
-pub fn each(comptime n: usize, comptime F: anytype, comptime args: anytype) Each(n, F, args) {
+pub fn each(
+    comptime n: usize,
+    comptime F: anytype,
+    comptime args: anytype,
+) Each(n, F, args) {
     var components: Each(n, F, args) = undefined;
     inline for (0..n) |i| components[i] = .{};
     return components;

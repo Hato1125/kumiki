@@ -47,13 +47,15 @@ pub fn find(comptime Owners: type, comptime P: type) ?Source {
         for (@typeInfo(Widget).@"struct".fields) |field| {
             if (field.type != T) continue;
             if (found != null) {
-                @compileError(@typeName(Widget) ++ " has more than one field of type " ++ @typeName(T));
+                @compileError(@typeName(Widget) ++
+                    " has more than one field of type " ++ @typeName(T));
             }
             found = field.name;
         }
         const gives = node_zig.provides(Widget) and node_zig.Provided(Widget) == T;
         if (gives and found != null) {
-            @compileError(@typeName(Widget) ++ " both holds and provides a " ++ @typeName(T));
+            @compileError(@typeName(Widget) ++
+                " both holds and provides a " ++ @typeName(T));
         }
         if (found) |name| return .{ .owner = i, .field = name };
         if (gives) return .{ .owner = i, .given = true };
@@ -63,7 +65,8 @@ pub fn find(comptime Owners: type, comptime P: type) ?Source {
 
 pub fn source(comptime Owners: type, comptime P: type) Source {
     return find(Owners, P) orelse
-        @compileError("no enclosing component is, holds or provides a " ++ @typeName(Pointee(P)) ++ " for this parameter");
+        @compileError("no enclosing component is, holds or provides a " ++
+            @typeName(Pointee(P)) ++ " for this parameter");
 }
 
 // Whether a parameter of type `P` is filled in from the owners. One that is
@@ -100,29 +103,48 @@ fn isCallback(comptime P: type) bool {
 fn Outer(comptime Owners: type) type {
     const fields = @typeInfo(Owners).@"struct".fields;
     var element_types: [fields.len - 1]type = undefined;
-    for (&element_types, fields[0 .. fields.len - 1]) |*element, field| element.* = field.type;
+    for (&element_types, fields[0 .. fields.len - 1]) |*element, field| {
+        element.* = field.type;
+    }
     return @Tuple(&element_types);
 }
 
 fn bind(comptime P: type, owners: anytype, state: *const State) P {
     if (@TypeOf(P.callee) == void) return .{};
     const Owners = @TypeOf(owners.*);
-    return .{ .owners = owners, .state = state, .run = struct {
-        fn run(erased: *const anyopaque, shared: *const State) void {
-            const inner: *const Owners = @ptrCast(@alignCast(erased));
-            var outer: Outer(Owners) = undefined;
-            inline for (0..outer.len) |i| outer[i] = inner.*[i];
-            invoke(P.callee, outer, shared, {});
-            tree.markTargets(P.callee, outer);
-        }
-    }.run };
+    return .{
+        .owners = owners,
+        .state = state,
+        .run = struct {
+            fn run(erased: *const anyopaque, shared: *const State) void {
+                const inner: *const Owners = @ptrCast(@alignCast(erased));
+                var outer: Outer(Owners) = undefined;
+                inline for (0..outer.len) |i| outer[i] = inner.*[i];
+                invoke(P.callee, outer, shared, {});
+                tree.markTargets(P.callee, outer);
+            }
+        }.run,
+    };
 }
 
-fn argument(comptime P: type, owners: anytype, state: *const State, event: anytype) P {
+fn argument(
+    comptime P: type,
+    owners: anytype,
+    state: *const State,
+    event: anytype,
+) P {
     if (P == Context) {
-        if (owners.len == 0) @compileError("ui.Context is only available inside a component");
+        if (owners.len == 0) {
+            @compileError("ui.Context is only available inside a component");
+        }
         const node = owners.*[owners.len - 1];
-        return .{ .id = node.id, .state = state, .arena = &node.arena, .gpa = state.gpa, .size = node.size };
+        return .{
+            .id = node.id,
+            .state = state,
+            .arena = &node.arena,
+            .gpa = state.gpa,
+            .size = node.size,
+        };
     }
     if (P == @TypeOf(event)) return event;
     if (comptime isCallback(P)) return bind(P, owners, state);
@@ -131,7 +153,8 @@ fn argument(comptime P: type, owners: anytype, state: *const State, event: anyty
     const pointer = comptime @typeInfo(P) == .pointer;
     if (comptime from.given) {
         if (comptime pointer and !@typeInfo(P).pointer.is_const) {
-            @compileError("a " ++ @typeName(Pointee(P)) ++ " is provided, so it is received by value or as a const pointer");
+            @compileError("a " ++ @typeName(Pointee(P)) ++ " is provided, " ++
+                "so it is received by value or as a const pointer");
         }
         const given = &owners.*[from.owner].given;
         return if (pointer) given else given.*;
@@ -146,10 +169,16 @@ fn argument(comptime P: type, owners: anytype, state: *const State, event: anyty
 // other type receives what the nearest component that holds or provides one
 // has of it, ui.Context receives the Context of the nearest component and
 // the type of `event` receives the event being handled.
-pub fn invoke(comptime f: anytype, owners: anytype, state: *const State, event: anytype) ReturnOf(f) {
+pub fn invoke(
+    comptime f: anytype,
+    owners: anytype,
+    state: *const State,
+    event: anytype,
+) ReturnOf(f) {
     var args: std.meta.ArgsTuple(@TypeOf(f)) = undefined;
     inline for (@typeInfo(@TypeOf(f)).@"fn".params, 0..) |param, i| {
-        const P = param.type orelse @compileError("parameters must have concrete types");
+        const P = param.type orelse
+            @compileError("parameters must have concrete types");
         args[i] = argument(P, &owners, state, event);
     }
     return @call(.auto, f, args);
