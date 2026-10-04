@@ -20,8 +20,10 @@ seconds: f64 = 0,
 // Drawn to when set. A canvas needs OpenGL, so only views that leave it
 // alone can be painted here.
 canvas: ?*ui.Canvas = null,
-// Where the scene asked for typed text, or null while it asks for none.
+// Where the scene asked for typed text, or null while it asks for none, and
+// how often it stopped asking.
 typing: ?ui.Bounds = null,
+stops: u32 = 0,
 // How long the scene was ready to wait for the last event it asked for.
 waited: f64 = 0,
 // What was copied last. A test copies here itself to have it pasted, and
@@ -70,6 +72,7 @@ pub fn end(_: *Fake) !void {}
 pub fn wake(_: *Fake) void {}
 
 pub fn input(fake: *Fake, area: ?ui.Bounds) void {
+    if (area == null) fake.stops += 1;
     fake.typing = area;
 }
 

@@ -1439,3 +1439,40 @@ test "a painter that asks for another frame is given it at that time without any
     try expectEqual(7, drawn_at);
     try expect(!s.state.built);
 }
+
+const Twin = struct {
+    pub const view = ui.column(.{ Entry{}, Entry{} });
+};
+
+test "a composition ends when the typing moves to another input or the window loses the keyboard" {
+    var s: Scene(Twin) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const first = &s.root.children[0].children[0];
+    const second = &s.root.children[0].children[1];
+
+    try press(&s, ui.keys.tab, 0);
+    s.impl.push(.{ .text = .{ .text = "か", .composing = true } });
+    try frame(&s);
+    try expectEqual(3, first.widget.composing);
+
+    // The implementation is stopped in between, so that its input method
+    // starts afresh in the second input.
+    try press(&s, ui.keys.tab, 0);
+    try expectEqual(0, first.widget.composing);
+    try expectEqual(1, s.impl.stops);
+    try expect(s.impl.typing != null);
+
+    s.impl.push(.{ .text = .{ .text = "な", .composing = true } });
+    try frame(&s);
+    try expectEqual(3, second.widget.composing);
+    s.impl.push(.{ .active = false });
+    try frame(&s);
+    try frame(&s);
+    try expectEqual(0, second.widget.composing);
+    try expectEqual(null, s.impl.typing);
+
+    s.impl.push(.{ .active = true });
+    try frame(&s);
+    try expect(s.impl.typing != null);
+}

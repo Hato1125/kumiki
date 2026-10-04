@@ -21,9 +21,9 @@ const tree = @import("tree.zig");
 // drawing, and `end()` shows it; `wake()` makes a waiting `next`, or else
 // the next one that waits, return, and is called from other threads;
 // `input(area)` starts the typing of text at `area`, or stops it when the
-// area is null; `copy(text)` puts text into the clipboard and returns
-// whether it took it, and `paste(allocator)` returns a copy of what it
-// holds, or null.
+// area is null, which also ends what an input method is composing;
+// `copy(text)` puts text into the clipboard and returns whether it took it,
+// and `paste(allocator)` returns a copy of what it holds, or null.
 pub fn Scene(comptime Impl: type, comptime Root: type) type {
     if (!node_zig.isComponent(Root)) @compileError("the root must be a component with a view");
     inline for (.{
@@ -44,6 +44,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // last, which is kept while it is outside the window.
         held: NodeId = 0,
         last: Point = .{},
+        // The node that takes the typed text.
+        typing: NodeId = 0,
         // When the last drawing asked for the next one.
         again: f64 = std.math.inf(f64),
 
@@ -181,18 +183,27 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 pass.layout(&s.root, .{});
                 if (s.pointer) |at| s.hoverAt(at);
             }
-            if (state.inputs != 0 or state.typing != null) s.retype();
+            if (state.inputs != 0 or s.typing != 0) s.retype();
         }
 
         // Asks the implementation for typed text where the focus is on an
-        // input or inside one, and no longer when it is not.
+        // input or inside one, and no longer when it is not. The input that
+        // the typing leaves is offered an empty composition, and the
+        // implementation is stopped, so that a composition under way ends
+        // on both sides instead of going on in the next input.
         fn retype(s: *Self) void {
-            var area: ?types.Bounds = null;
+            var found: input.Typing = .{};
             const focus = s.state.focus.id();
-            if (s.state.active and focus != 0) _ = input.typingArea(&s.root, focus, &area);
-            if (std.meta.eql(area, s.state.typing)) return;
-            s.state.typing = area;
-            s.impl.input(area);
+            if (s.state.active and focus != 0) _ = input.typingArea(&s.root, focus, &found);
+            if (found.target != s.typing and s.typing != 0) {
+                _ = s.offer(s.typing, .{ .text = .{ .text = "", .composing = true } });
+                if (s.state.typing != null) s.impl.input(null);
+                s.state.typing = null;
+            }
+            s.typing = found.target;
+            if (std.meta.eql(found.area, s.state.typing)) return;
+            s.state.typing = found.area;
+            s.impl.input(found.area);
         }
 
         fn pathTo(s: *Self, id: NodeId) Path {

@@ -82,9 +82,11 @@ pub const Window = struct {
         _ = c.SDL_PushEvent(&event);
     }
 
-    // Shows the candidates of an input method near `area`.
+    // Shows the candidates of an input method near `area`. Stopping the
+    // input ends a composition on most systems, and clearing it on the rest.
     pub fn input(w: *Window, area: ?types.Bounds) void {
         const at = area orelse {
+            _ = c.SDL_ClearComposition(w.window);
             _ = c.SDL_StopTextInput(w.window);
             return;
         };

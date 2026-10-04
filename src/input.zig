@@ -213,17 +213,26 @@ pub fn walkFocus(node: anytype, walk: *FocusWalk) void {
     _ = each(node, .shown, walkFocus, .{walk});
 }
 
-// The bounds of the nearest node that takes typed text among `target` and
-// its ancestors.
-pub fn typingArea(node: anytype, target: NodeId, area: *?types.Bounds) bool {
-    if (node.id != target and !each(node, .shown, typingArea, .{ target, area })) return false;
+fn boundsOf(node: anytype) types.Bounds {
+    return .{ .x = node.offset.x, .y = node.offset.y, .w = node.size.width, .h = node.size.height };
+}
+
+// The node that takes typed text and where an input method shows what it
+// offers for it.
+pub const Typing = struct {
+    target: NodeId = 0,
+    area: ?types.Bounds = null,
+};
+
+// Finds the nearest node that takes typed text among `target` and its
+// ancestors. Its area is its bounds.
+pub fn typingArea(node: anytype, target: NodeId, found: *Typing) bool {
+    if (node.id != target and !each(node, .shown, typingArea, .{ target, found })) return false;
     if (comptime isInput(@TypeOf(node.widget))) {
-        if (area.* == null) area.* = .{
-            .x = node.offset.x,
-            .y = node.offset.y,
-            .w = node.size.width,
-            .h = node.size.height,
-        };
+        if (found.target == 0) {
+            found.target = node.id;
+            found.area = boundsOf(node);
+        }
     }
     return true;
 }
