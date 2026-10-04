@@ -540,6 +540,27 @@ test "a component provides a value to the functions inside it, and what is insid
     try expect(!s.busy());
 }
 
+const Minimums = struct {
+    pub const view = ui.column(.{
+        ui.text("x").frame(.{ .min_width = 120, .min_height = 40 }),
+        ui.text("x").frame(.{ .width = 60, .min_width = 60 }),
+        ui.text("x").frame(.{ .width = 60, .min_width = 500 }),
+    });
+};
+
+test "a frame tells its child to be no smaller than its minimum, as far as the space goes" {
+    var s: Scene(Minimums) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+
+    const rows = &s.root.children[0].children;
+    try expectEqual(ui.Extent{ .width = 120, .height = 40 }, rows[0].children[0].size);
+    try expectEqual(ui.Extent{ .width = 120, .height = 40 }, rows[0].size);
+    // With the same width it is fixed.
+    try expectEqual(60, rows[1].children[0].size.width);
+    try expectEqual(60, rows[2].children[0].size.width);
+}
+
 // Overwrites memory before it is freed, so that a test notices a string that
 // is read after its arena is gone.
 const poisoning: std.mem.Allocator = .{ .ptr = &trace_buf, .vtable = &.{

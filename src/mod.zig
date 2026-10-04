@@ -144,10 +144,14 @@ pub fn padding(self: anytype, spec: anytype) Wrapped(@TypeOf(self), Insets) {
 }
 
 // Gives the child a fixed size, or one that grows up to `max_width` and
-// `max_height` where space allows, and places it inside.
+// `max_height` where space allows, and places it inside. The child is told
+// to be no smaller than `min_width` and `min_height`, as far as the space
+// goes.
 const Frame = struct {
     width: ?f32 = null,
     height: ?f32 = null,
+    min_width: ?f32 = null,
+    min_height: ?f32 = null,
     max_width: ?f32 = null,
     max_height: ?f32 = null,
     alignment: Alignment = .center,
@@ -159,10 +163,17 @@ const Frame = struct {
     }
 
     pub fn measure(f: Frame, child: anytype, c: Constraint) Extent {
-        const size = pass.measure(child, .{ .max = .{
+        const max: Extent = .{
             .width = @min(f.width orelse f.max_width orelse types.inf, c.max.width),
             .height = @min(f.height orelse f.max_height orelse types.inf, c.max.height),
-        } });
+        };
+        const size = pass.measure(child, .{
+            .min = .{
+                .width = @min(f.min_width orelse 0, max.width),
+                .height = @min(f.min_height orelse 0, max.height),
+            },
+            .max = max,
+        });
         return c.constrain(.{
             .width = outer(f.width, f.max_width, c.min.width, c.max.width, size.width),
             .height = outer(f.height, f.max_height, c.min.height, c.max.height, size.height),
