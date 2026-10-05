@@ -2130,3 +2130,224 @@ test "a popup opens where it is asked for, and again where another button is pre
     try click(&s, .{ .x = 100, .y = 100 });
     try expect(!s.root.widget.open);
 }
+
+const command_mod: u16 = if (@import("builtin").os.tag.isDarwin()) 0x0400 else 0x0040;
+const shift_mod: u16 = 0x0001;
+
+// A view that saves with keys that can be set, beside a button.
+const Saver = struct {
+    saves: u32 = 0,
+    bound: ?ui.Chord = .{ .key = 's', .command = true },
+
+    pub const view = ui.row(.{
+        ui.rect().frame(.{ .width = 40, .height = 40 }).tap(nothing),
+        ui.rect().frame(.{ .width = 40, .height = 40 }).shortcut(saveKeys, save),
+    });
+
+    fn saveKeys(self: *const Saver) ?ui.Chord {
+        return self.bound;
+    }
+
+    fn save(self: *Saver, key: ui.KeyPress) void {
+        if (key.key == self.bound.?.key) self.saves += 1;
+    }
+
+    fn nothing() void {}
+};
+
+test "a shortcut runs wherever the focus is, with the keys that its function returns" {
+    var s: Scene(Saver) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const saver = &s.root.widget;
+
+    try press(&s, 's', command_mod);
+    try expectEqual(1, saver.saves);
+    try press(&s, ui.keys.tab, 0);
+    try expect(s.state.focus.id() != 0);
+    try press(&s, 's', command_mod);
+    try expectEqual(2, saver.saves);
+
+    // The modifier keys are those of the chord and no others.
+    try press(&s, 's', 0);
+    try press(&s, 's', command_mod | shift_mod);
+    try expectEqual(2, saver.saves);
+
+    saver.bound = .{ .key = 'w', .shift = true };
+    try press(&s, 's', command_mod);
+    try expectEqual(2, saver.saves);
+    try press(&s, 'w', shift_mod);
+    try expectEqual(3, saver.saves);
+
+    saver.bound = null;
+    try press(&s, 'w', shift_mod);
+    try expectEqual(3, saver.saves);
+}
+
+// Three views with the same shortcut, one around the other two, and a view
+// that takes keys.
+const Rivals = struct {
+    greedy: bool = false,
+
+    pub const view = ui.row(.{
+        ui.rect().frame(.{ .width = 40, .height = 40 }).tap(nothing).shortcut(keys, back),
+        ui.rect().frame(.{ .width = 40, .height = 40 }).tap(nothing).shortcut(keys, front),
+        ui.rect().frame(.{ .width = 40, .height = 40 }).key(take),
+    }).shortcut(keys, around);
+
+    fn keys() ui.Chord {
+        return .{ .key = 'k', .command = true };
+    }
+
+    fn back() void {
+        note('b');
+    }
+
+    fn front() void {
+        note('f');
+    }
+
+    fn around() void {
+        note('a');
+    }
+
+    fn take(self: *const Rivals, key: ui.KeyPress) bool {
+        return self.greedy and key.key == 'k';
+    }
+
+    fn nothing() void {}
+};
+
+test "a key goes to the focus before the shortcuts, of which the nearest around the focus runs, or else the one in front" {
+    var s: Scene(Rivals) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    trace = "";
+
+    try press(&s, 'k', command_mod);
+    try expectEqualStrings("f", trace);
+
+    try press(&s, ui.keys.tab, 0);
+    try press(&s, 'k', command_mod);
+    try expectEqualStrings("fb", trace);
+
+    try press(&s, ui.keys.tab, 0);
+    try press(&s, ui.keys.tab, 0);
+    try press(&s, 'k', command_mod);
+    try expectEqualStrings("fba", trace);
+
+    s.root.widget.greedy = true;
+    try press(&s, 'k', command_mod);
+    try expectEqualStrings("fba", trace);
+}
+
+// An input with a shortcut of one key alone and one with the command key.
+const Jotter = struct {
+    pub const view = ui.text("field").padding(4).input(jot)
+        .shortcut(alone, plain)
+        .shortcut(held, commanded);
+
+    fn jot() void {}
+
+    fn alone() ui.Chord {
+        return .{ .key = 'a' };
+    }
+
+    fn held() ui.Chord {
+        return .{ .key = 'a', .command = true };
+    }
+
+    fn plain() void {
+        note('p');
+    }
+
+    fn commanded() void {
+        note('c');
+    }
+};
+
+test "while text is typed, a shortcut without Ctrl, Alt or the command key does not run" {
+    var s: Scene(Jotter) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    trace = "";
+
+    try press(&s, ui.keys.tab, 0);
+    try expect(s.impl.typing != null);
+    try press(&s, 'a', 0);
+    try expectEqualStrings("", trace);
+    try press(&s, 'a', command_mod);
+    try expectEqualStrings("c", trace);
+
+    try press(&s, ui.keys.escape, 0);
+    try expectEqual(null, s.impl.typing);
+    try press(&s, 'a', 0);
+    try expectEqualStrings("cp", trace);
+}
+
+// A view that shows a popup with a shortcut that the view has too, and with
+// one that only the view has.
+const Commands = struct {
+    open: bool = false,
+
+    pub const view = ui.rect().frame(.{ .width = 100, .height = 40 }).tap(toggle)
+        .popup(isOpen, close, ui.rect().frame(.{ .width = 100, .height = 40 }).shortcut(pick, inside), .{}, .{})
+        .shortcut(pick, outside)
+        .shortcut(quit, leave);
+
+    fn isOpen(self: *const Commands) bool {
+        return self.open;
+    }
+
+    fn toggle(self: *Commands) void {
+        self.open = !self.open;
+    }
+
+    fn close(self: *Commands) void {
+        self.open = false;
+    }
+
+    fn pick() ui.Chord {
+        return .{ .key = 'p', .command = true };
+    }
+
+    fn quit() ui.Chord {
+        return .{ .key = 'q', .command = true };
+    }
+
+    fn inside() void {
+        note('i');
+    }
+
+    fn outside() void {
+        note('o');
+    }
+
+    fn leave() void {
+        note('q');
+    }
+};
+
+test "while a popup is open, only the shortcuts in it run" {
+    var s: Scene(Commands) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    trace = "";
+
+    try press(&s, 'p', command_mod);
+    try press(&s, 'q', command_mod);
+    try expectEqualStrings("oq", trace);
+
+    try click(&s, .{ .x = 50, .y = 20 });
+    try frame(&s);
+    try expect(s.root.widget.open);
+    try press(&s, 'p', command_mod);
+    try press(&s, 'q', command_mod);
+    try expectEqualStrings("oqi", trace);
+
+    try press(&s, ui.keys.escape, 0);
+    try expect(!s.root.widget.open);
+    try frame(&s);
+    try press(&s, 'p', command_mod);
+    try expectEqualStrings("oqio", trace);
+}

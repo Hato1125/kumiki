@@ -23,6 +23,7 @@ pub fn Show(comptime f: anytype) type {
         pub const hover = mod.hover;
         pub const drop = mod.drop;
         pub const popup = mod.popup;
+        pub const shortcut = mod.shortcut;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };

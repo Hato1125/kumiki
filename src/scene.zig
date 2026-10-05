@@ -411,8 +411,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             }
         }
 
-        // Keys go to the focus first. When nothing used them, Tab moves the
-        // focus and Escape drops it. While a popup is open, the focus moves
+        // Keys go to the focus first, and then to the shortcuts. When nothing
+        // used them, Tab moves the focus and Escape drops it. While a popup is open, the focus moves
         // inside the one in front, with the up and down keys too, and Escape
         // dismisses the popups instead.
         fn pressKey(s: *Self, press: input.KeyPress) void {
@@ -422,6 +422,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 return;
             }
             if (!press.down) return;
+            if (s.shortcut(press)) return;
 
             if (press.key == keys.escape) {
                 if (!s.dismiss()) s.move(&state.focus, .{});
@@ -436,6 +437,17 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             if (!inside) input.walkFocus(&s.root, &walk);
             const backward = if (tab) press.shift() else press.key == keys.up;
             s.move(&state.focus, s.pathTo(walk.result(backward)));
+        }
+
+        // Returns whether a shortcut ran.
+        fn shortcut(s: *Self, press: input.KeyPress) bool {
+            if (comptime !input.binds(@TypeOf(s.root))) return false;
+            var by: NodeId = 0;
+            if (!popup.shortcut(&s.root, press, .{}, &s.state, &by)) {
+                input.shortcut(&s.root, press, .{}, &s.state, &by);
+            }
+            if (by != 0) s.pending = true;
+            return by != 0;
         }
 
         // Returns the node that handled it, or 0.

@@ -243,6 +243,30 @@ pub fn walkFocus(node: anytype, walk: *input.FocusWalk) bool {
     return each(node, .front, walkFocus, .{walk});
 }
 
+/// Offers `press` to the shortcuts in what the open popup in front shows.
+/// Returns false when no popup is open.
+pub fn shortcut(
+    node: anytype,
+    press: input.KeyPress,
+    owners: anytype,
+    state: *const State,
+    by: *node_zig.NodeId,
+) bool {
+    if (comptime !pops(@TypeOf(node.*))) return false;
+    const Widget = @TypeOf(node.widget);
+    const inner = if (comptime node_zig.isComponent(Widget)) owners ++ .{node} else owners;
+    if (comptime isPopup(Widget)) {
+        if (node.widget.active) {
+            const content = &node.children[1];
+            if (!shortcut(content, press, inner, state, by)) {
+                input.shortcut(content, press, inner, state, by);
+            }
+            return true;
+        }
+    }
+    return each(node, .front, shortcut, .{ press, inner, state, by });
+}
+
 /// Runs the `dismiss` of the popups that are open, the ones inside first.
 /// Sets `told` when one ran.
 pub fn dismiss(

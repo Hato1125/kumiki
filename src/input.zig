@@ -89,6 +89,33 @@ pub const KeyPress = struct {
     }
 };
 
+/// A key and the modifier keys that are held with it, no others. `key` has
+/// the value of SDL3, which for a letter is the lower case character.
+/// `command` is the key of shortcuts: Cmd on macOS and Ctrl elsewhere.
+pub const Chord = struct {
+    key: u32,
+    command: bool = false,
+    shift: bool = false,
+    alt: bool = false,
+    ctrl: bool = false,
+
+    pub fn matches(chord: Chord, press: KeyPress) bool {
+        const darwin = builtin.os.tag.isDarwin();
+        const ctrl = chord.ctrl or (chord.command and !darwin);
+        const gui = chord.command and darwin;
+        return press.key == chord.key and
+            press.shift() == chord.shift and
+            press.alt() == chord.alt and
+            press.ctrl() == ctrl and
+            (press.mod & gui_bits != 0) == gui;
+    }
+
+    // Whether the chord belongs to the text while text is typed.
+    fn plain(chord: Chord) bool {
+        return !chord.command and !chord.alt and !chord.ctrl;
+    }
+};
+
 pub const keys = struct {
     pub const enter: u32 = 0x0d;
     pub const space: u32 = 0x20;
@@ -318,6 +345,7 @@ pub const Offer = union(enum) {
     text: TextInput,
     pointer: Pointer,
     drop: Drop,
+    shortcut: KeyPress,
 };
 
 // Enter and Space activate a tap, except while text is typed: they belong to
@@ -327,7 +355,7 @@ fn activates(offer: Offer, state: *const State) bool {
         .click => true,
         .key => |press| state.typing == null and press.down and
             (press.key == keys.enter or press.key == keys.space),
-        .wheel, .text, .pointer, .drop => false,
+        .wheel, .text, .pointer, .drop, .shortcut => false,
     };
 }
 
@@ -368,6 +396,14 @@ fn handle(
             if (!invoke(f, owners, state, local)) return false;
         },
         .hover => return false,
+        .shortcut => {
+            if (offer != .shortcut) return false;
+            const bound: ?Chord = invoke(Widget.chord, owners, state, {});
+            const chord = bound orelse return false;
+            if (!chord.matches(offer.shortcut)) return false;
+            if (chord.plain() and state.typing != null) return false;
+            _ = invoke(f, owners, state, offer.shortcut);
+        },
     }
     markTargets(f, owners);
     return true;
@@ -388,6 +424,47 @@ pub fn bubble(
         return false;
     }
     if (by.* == 0 and handle(node, offer, owners, state)) by.* = node.id;
+    return true;
+}
+
+/// Whether a node of type `N`, or one inside it, has a `shortcut` modifier.
+pub fn binds(comptime N: type) bool {
+    return node_zig.holds(N, isShortcut);
+}
+
+fn isShortcut(comptime Widget: type) bool {
+    return handles(Widget, .shortcut);
+}
+
+/// Offers `press` to the views in `node` with a `shortcut` modifier until the
+/// chord of one matches, which `by` then names: first to the focus and its
+/// ancestors, then to all that are shown, the ones in front and inside first.
+pub fn shortcut(
+    node: anytype,
+    press: KeyPress,
+    owners: anytype,
+    state: *const State,
+    by: *NodeId,
+) void {
+    if (comptime !binds(@TypeOf(node.*))) return;
+    const offer: Offer = .{ .shortcut = press };
+    const focus = state.focus.id();
+    if (focus != 0) _ = bubble(node, focus, offer, owners, state, by);
+    if (by.* == 0) _ = sweep(node, offer, owners, state, by);
+}
+
+fn sweep(
+    node: anytype,
+    offer: Offer,
+    owners: anytype,
+    state: *const State,
+    by: *NodeId,
+) bool {
+    if (comptime !binds(@TypeOf(node.*))) return false;
+    const inner = if (comptime node_zig.isComponent(@TypeOf(node.widget))) owners ++ .{node} else owners;
+    if (each(node, .front, sweep, .{ offer, inner, state, by })) return true;
+    if (!handle(node, offer, owners, state)) return false;
+    by.* = node.id;
     return true;
 }
 

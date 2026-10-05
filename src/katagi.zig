@@ -23,6 +23,7 @@ pub const Wheel = input.Wheel;
 pub const Hover = input.Hover;
 pub const Drop = input.Drop;
 pub const KeyPress = input.KeyPress;
+pub const Chord = input.Chord;
 pub const TextInput = input.TextInput;
 pub const keys = input.keys;
 pub const startup = canvas.startup;

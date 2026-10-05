@@ -99,6 +99,7 @@ pub const HandlerKind = enum {
     pointer,
     hover,
     drop,
+    shortcut,
 };
 
 pub fn handles(comptime T: type, comptime kind: HandlerKind) bool {

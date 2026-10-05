@@ -69,6 +69,7 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
         pub const hover = mod.hover;
         pub const drop = mod.drop;
         pub const popup = mod.popup;
+        pub const shortcut = mod.shortcut;
         pub const animation = mod.animation;
         pub const with = mod.with;
     };
@@ -356,6 +357,32 @@ pub fn input(
     comptime handler: anytype,
 ) Wrapped(@TypeOf(self), Handler(.input, handler)) {
     return with(self, Handler(.input, handler){});
+}
+
+fn Shortcut(comptime chord_fn: anytype, comptime action: anytype) type {
+    return struct {
+        pub const handler_kind: HandlerKind = .shortcut;
+        pub const handler = action;
+        pub const chord = chord_fn;
+    };
+}
+
+/// Runs `action` when the keys that `chord` returns are pressed, wherever the
+/// focus is, as long as the view is shown. `chord` returns a ui.Chord, or
+/// null for no keys, and is asked at every press, so that the keys can come
+/// from settings. The parameters of both are filled in by type, and `action`
+/// may take the ui.KeyPress.
+/// A key goes to the focus and the `key` modifiers around it first. Of the
+/// shortcuts that it then matches, one runs: the nearest around the focus, or
+/// else the one in front. While a popup is open, only the shortcuts in the
+/// one in front run, and while text is typed, only chords with Ctrl, Alt or
+/// the command key.
+pub fn shortcut(
+    self: anytype,
+    comptime chord: anytype,
+    comptime action: anytype,
+) Wrapped(@TypeOf(self), Shortcut(chord, action)) {
+    return with(self, Shortcut(chord, action){});
 }
 
 fn Popped(
