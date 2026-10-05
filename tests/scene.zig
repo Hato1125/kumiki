@@ -981,6 +981,7 @@ const Adder = struct {
     waiting: bool = false,
 
     pub const view = ui.show(label).padding(8).tap(start);
+    pub const later = .{add};
 
     fn label(self: *const Adder, cx: ui.Context) ui.Text {
         return ui.text(cx.print("{d}", .{self.total}));
@@ -988,16 +989,16 @@ const Adder = struct {
 
     fn start(self: *Adder, cx: ui.Context) void {
         self.waiting = true;
-        cx.spawn(sum, .{ 20, 22 });
+        cx.spawn(sum, .{ 20, 22 }, add);
     }
 
-    pub fn receive(self: *Adder, result: Sum) void {
+    fn add(self: *Adder, result: Sum) void {
         self.waiting = false;
         self.total = result.value;
     }
 };
 
-test "a function spawned in the background hands its result to receive, which builds the component again" {
+test "a function spawned in the background hands its result to the function named with it, which builds the component again" {
     var s: Scene(Adder) = try .init(gpa, options, .{});
     defer s.deinit();
     try frame(&s);
@@ -1014,12 +1015,13 @@ const Eager = struct {
     total: u32 = 0,
 
     pub const view = ui.text("eager");
+    pub const later = .{take};
 
     pub fn mount(cx: ui.Context) void {
-        cx.spawn(sum, .{ 2, 3 });
+        cx.spawn(sum, .{ 2, 3 }, take);
     }
 
-    pub fn receive(self: *Eager, result: Sum) void {
+    fn take(self: *Eager, result: Sum) void {
         self.total = result.value;
     }
 };
@@ -1035,7 +1037,7 @@ const Hand = struct {
     pub const view = ui.text("work").padding(8).tap(start);
 
     fn start(cx: ui.Context) void {
-        cx.spawn(sum, .{ 1, 2 });
+        cx.spawn(sum, .{ 1, 2 }, Foreman.take);
     }
 };
 
@@ -1043,13 +1045,14 @@ const Foreman = struct {
     total: u32 = 0,
 
     pub const view = ui.row(.{Hand{}});
+    pub const later = .{take};
 
-    pub fn receive(self: *Foreman, result: Sum) void {
+    fn take(self: *Foreman, result: Sum) void {
         self.total = result.value;
     }
 };
 
-test "a result goes to the nearest component around the spawning one that receives its type" {
+test "a result goes to the nearest component around the spawning one that lists the function" {
     var s: Scene(Foreman) = try .init(gpa, options, .{});
     defer s.deinit();
     try frame(&s);
@@ -1063,12 +1066,13 @@ var chores_done: u32 = 0;
 
 const Chore = struct {
     pub const view = ui.text("chore").padding(4).tap(start);
+    pub const later = .{done};
 
     fn start(cx: ui.Context) void {
-        cx.spawn(sumLater, .{ 3, 4 });
+        cx.spawn(sumLater, .{ 3, 4 }, done);
     }
 
-    pub fn receive(_: *Chore, _: Sum) void {
+    fn done(_: *Chore, _: Sum) void {
         chores_done += 1;
     }
 };
@@ -1119,10 +1123,13 @@ test "the scene waits for the functions that still run when it ends" {
 
 const Parting = struct {
     pub const view = ui.text("parting");
+    pub const later = .{drop};
 
     pub fn unmount(cx: ui.Context) void {
-        cx.spawn(sum, .{ 1, 1 });
+        cx.spawn(sum, .{ 1, 1 }, drop);
     }
+
+    fn drop(_: Sum) void {}
 };
 
 // std.testing.allocator fails this test when the function outlives the scene.
@@ -1142,12 +1149,13 @@ const Borrower = struct {
     total: u32 = 0,
 
     pub const view = ui.text("borrow");
+    pub const later = .{take};
 
     pub fn mount(cx: ui.Context) void {
-        cx.spawn(lend, .{});
+        cx.spawn(lend, .{}, take);
     }
 
-    pub fn receive(self: *Borrower, result: *Sum) void {
+    fn take(self: *Borrower, result: *Sum) void {
         self.total = result.value;
     }
 };
@@ -2398,44 +2406,42 @@ test "a component that asks for the focus has it on the first view that takes it
     try expect(s.impl.typing != null);
 }
 
-const Signal = enum {
-    tick,
-    ring,
-};
-
 // Counts the seconds by itself, and rings a while after it was pressed last.
 const Clock = struct {
     seconds: u32 = 0,
     rings: u32 = 0,
 
     pub const view = ui.rect().frame(.{ .width = 40, .height = 40 }).tap(ask);
+    pub const later = .{
+        tick,
+        ring,
+    };
 
     pub fn mount(cx: ui.Context) void {
-        cx.after(1, Signal.tick);
+        cx.after(1, tick);
     }
 
-    pub fn receive(self: *Clock, signal: Signal, cx: ui.Context) void {
-        switch (signal) {
-            .tick => {
-                self.seconds += 1;
-                cx.after(1, Signal.tick);
-            },
-            .ring => self.rings += 1,
-        }
+    fn tick(self: *Clock, cx: ui.Context) void {
+        self.seconds += 1;
+        cx.after(1, tick);
+    }
+
+    fn ring(self: *Clock) void {
+        self.rings += 1;
     }
 
     fn ask(cx: ui.Context) void {
-        cx.after(0.5, Signal.ring);
+        cx.after(0.5, ring);
     }
 };
 
-test "a value is handed to receive after a while, and asking for an equal one again puts it off" {
+test "a function is called after a while, and asking for it again puts the call off" {
     var s: Scene(Clock) = try .init(gpa, options, .{});
     defer s.deinit();
     const clock = &s.root.widget;
     const inside: ui.Point = .{ .x = 20, .y = 20 };
 
-    // The scene waits for input no longer than until the value is due.
+    // The scene waits for input no longer than until the call is due.
     try frame(&s);
     try frame(&s);
     try expectEqual(1, s.impl.waited);
@@ -2460,7 +2466,7 @@ test "a value is handed to receive after a while, and asking for an equal one ag
     try frame(&s);
     try expectEqual(1, clock.rings);
 
-    // A value that differs waits on its own.
+    // Another function waits on its own.
     try expectEqual(2, clock.seconds);
     s.impl.seconds = 3.3;
     try frame(&s);

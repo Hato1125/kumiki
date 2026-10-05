@@ -1,26 +1,28 @@
 //! Functions that run on threads of their own and hand what they return back
-//! to the thread that started them, and values that are handed back after a
-//! while.
+//! to the thread that started them, and calls that wait for their time.
 
 const std = @import("std");
 
-/// Stands for a type at run time: the address of a byte that exists once per
-/// type.
-pub fn keyOf(comptime T: type) *const anyopaque {
+/// Stands for a type or a function at run time: the address of a byte that
+/// exists once for each.
+pub fn keyOf(comptime what: anytype) *const anyopaque {
     return &struct {
-        const Of = T;
+        const of = what;
         var byte: u8 = 0;
     }.byte;
 }
 
 /// A function on its way. Its thread sets `done`; everything else belongs to
 /// the thread that started it. `tag` is what the starter wants back with the
-/// result. A value that waits has no thread, and is handed over after `due`.
+/// result, `key` stands for the function to hand it to and `kind` for its
+/// type. A call that waits has no thread and no result, and is made after
+/// `due`.
 pub const Task = struct {
     next: ?*Task,
     tag: u32,
     key: *const anyopaque,
-    result: *const anyopaque,
+    kind: *const anyopaque,
+    result: *const anyopaque = undefined,
     thread: ?std.Thread = null,
     done: std.atomic.Value(bool) = .init(false),
     due: f64 = 0,
@@ -35,12 +37,14 @@ pub const Tasks = struct {
     waker: std.atomic.Value(?*anyopaque) = .init(null),
     wake: *const fn (*anyopaque) void,
 
-    /// Runs `work(args...)` on a new thread.
+    /// Runs `work(args...)` on a new thread, for `key` to be handed what it
+    /// returns.
     pub fn spawn(
         tasks: *Tasks,
         tag: u32,
         comptime work: anytype,
         args: std.meta.ArgsTuple(@TypeOf(work)),
+        key: *const anyopaque,
     ) void {
         const Job = struct {
             task: Task,
@@ -67,7 +71,8 @@ pub const Tasks = struct {
             .task = .{
                 .next = tasks.first,
                 .tag = tag,
-                .key = keyOf(@TypeOf(job.result)),
+                .key = key,
+                .kind = keyOf(@TypeOf(job.result)),
                 .result = @ptrCast(&job.result),
                 .destroy = Job.destroy,
             },
@@ -76,53 +81,40 @@ pub const Tasks = struct {
         tasks.first = &job.task;
     }
 
-    /// Keeps `value` for `tag` until the time `at`. An equal value that waits
-    /// for the same tag gives way to it.
+    /// Has `key` called for `tag` at the time `at`. A call of it that still
+    /// waits for the same tag gives way.
     pub fn after(
         tasks: *Tasks,
         tag: u32,
         at: f64,
-        value: anytype,
+        key: *const anyopaque,
     ) void {
-        const Value = @TypeOf(value);
-        const Job = struct {
-            task: Task,
-            value: Value,
-
-            fn destroy(task: *Task, gpa: std.mem.Allocator) void {
-                gpa.destroy(@as(*@This(), @fieldParentPtr("task", task)));
-            }
-        };
         var link = &tasks.first;
         while (link.*) |task| {
-            const waiting: *const Value = @ptrCast(@alignCast(task.result));
-            if (task.thread == null and
-                task.tag == tag and
-                task.key == keyOf(Value) and
-                std.meta.eql(waiting.*, value))
-            {
+            if (task.thread == null and task.tag == tag and task.key == key) {
                 link.* = task.next;
                 task.destroy(task, tasks.gpa);
             } else {
                 link = &task.next;
             }
         }
-        const job = tasks.gpa.create(Job) catch @panic("out of memory");
-        job.* = .{
-            .value = value,
-            .task = .{
-                .next = tasks.first,
-                .tag = tag,
-                .key = keyOf(Value),
-                .result = @ptrCast(&job.value),
-                .due = at,
-                .destroy = Job.destroy,
-            },
+        const task = tasks.gpa.create(Task) catch @panic("out of memory");
+        task.* = .{
+            .next = tasks.first,
+            .tag = tag,
+            .key = key,
+            .kind = keyOf(void),
+            .due = at,
+            .destroy = destroyCall,
         };
-        tasks.first = &job.task;
+        tasks.first = task;
     }
 
-    /// When the first of the values that wait is handed over, or infinity.
+    fn destroyCall(task: *Task, gpa: std.mem.Allocator) void {
+        gpa.destroy(task);
+    }
+
+    /// When the first of the calls that wait is made, or infinity.
     pub fn due(tasks: *const Tasks) f64 {
         var first = std.math.inf(f64);
         var next = tasks.first;
@@ -132,7 +124,7 @@ pub const Tasks = struct {
         return first;
     }
 
-    /// Takes out a function that has ended, or a value that was due before
+    /// Takes out a function that has ended, or a call that was due before
     /// `now`. A thread is joined first, because it still reads the task after
     /// it set `done`. The caller reads the result and then calls `destroy`.
     pub fn take(tasks: *Tasks, now: f64) ?*Task {
@@ -148,7 +140,7 @@ pub const Tasks = struct {
     }
 
     /// Waits for the functions that still run and drops what they return,
-    /// and the values that wait.
+    /// and the calls that wait.
     pub fn deinit(tasks: *Tasks) void {
         tasks.waker.store(null, .release);
         while (tasks.first) |task| {

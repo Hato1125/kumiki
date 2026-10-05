@@ -524,10 +524,22 @@ pub fn watch(
     told.* = true;
 }
 
-/// Hands the result of a background function, or a value that was due, to
-/// the `receive` of the component `target`, or of the nearest one around it that takes the
-/// result's type in the one parameter that its owners do not fill in. Returns
-/// whether `target` is inside `node`.
+// What a function that is called later is handed: the type of the parameter
+// that the owners do not fill in, or void without one.
+fn Handed(comptime f: anytype, comptime Owners: type) type {
+    var handed: type = void;
+    for (@typeInfo(@TypeOf(f)).@"fn".params) |param| {
+        const P = param.type orelse @compileError("parameters must have concrete types");
+        if (!call.fills(Owners, P)) handed = P;
+    }
+    return handed;
+}
+
+/// Calls the function that `task` names, one of those that the component
+/// `target`, or the nearest one around it that has it, lists in
+/// `pub const later`. The result of a background function goes into the one
+/// parameter that the owners do not fill in. Returns whether `target` is
+/// inside `node`.
 pub fn deliver(
     node: anytype,
     target: NodeId,
@@ -542,15 +554,24 @@ pub fn deliver(
     if (node.id != target and !each(node, .all, deliver, .{ target, task, inner, state, handled })) {
         return false;
     }
-    if (comptime !component or !@hasDecl(Widget, "receive")) return true;
+    if (comptime !component or !@hasDecl(Widget, "later")) return true;
 
-    inline for (@typeInfo(@TypeOf(Widget.receive)).@"fn".params) |param| {
-        const P = param.type orelse continue;
-        if (comptime call.fills(@TypeOf(inner), P)) continue;
-        if (!handled.* and task.key == task_zig.keyOf(P)) {
-            const result: *const P = @ptrCast(@alignCast(task.result));
-            invoke(Widget.receive, inner, state, result.*);
-            markTargets(Widget.receive, inner);
+    inline for (Widget.later) |f| {
+        const Result = comptime Handed(f, @TypeOf(inner));
+        if (comptime node_zig.ReturnOf(f) != void) {
+            @compileError("a function in the `later` of " ++ @typeName(Widget) ++ " returns a value");
+        }
+        if (!handled.* and task.key == task_zig.keyOf(f)) {
+            if (task.kind != task_zig.keyOf(Result)) {
+                @panic("a function in `later` takes another type than it is handed");
+            }
+            if (Result == void) {
+                invoke(f, inner, state, {});
+            } else {
+                const result: *const Result = @ptrCast(@alignCast(task.result));
+                invoke(f, inner, state, result.*);
+            }
+            markTargets(f, inner);
             handled.* = true;
         }
     }

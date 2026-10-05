@@ -191,14 +191,14 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         }
 
         // Hands over what the background functions that have ended returned,
-        // and the values that are due. A result is dropped when the component
-        // that asked for it is gone.
+        // and makes the calls that are due. Both are dropped when the
+        // component that asked for them is gone.
         fn receive(s: *Self) void {
             while (s.state.tasks.take(s.state.now)) |task| {
                 var handled = false;
                 const found = input.deliver(&s.root, task.tag, task, .{}, &s.state, &handled);
                 if (found and !handled) {
-                    @panic("no component receives the result of a background function");
+                    @panic("no component lists the function given to spawn or after in its `later`");
                 }
                 if (handled) s.pending = true;
                 task.destroy(task, s.state.gpa);

@@ -5,6 +5,7 @@ const std = @import("std");
 
 const node_zig = @import("node.zig");
 const contains = node_zig.contains;
+const keyOf = @import("task.zig").keyOf;
 const types = @import("types.zig");
 
 const Context = @This();
@@ -47,24 +48,37 @@ pub fn pressed(cx: Context) bool {
 }
 
 /// Runs `work(args...)` on a thread of its own, where it must not touch the
-/// components. What it returns reaches `pub fn receive` of this component, or
-/// of the nearest one around it with a parameter of that type, on the thread
-/// of the scene. It is dropped when this component is gone by then.
+/// components, and hands what it returns to `done` on the thread of the
+/// scene. `done` is one of the functions that this component, or one around
+/// it, lists in `pub const later = .{ ... }`: its parameters are filled in by
+/// type, and the one that nothing fills in takes the result. The result is
+/// dropped when this component is gone by then.
 pub fn spawn(
     cx: Context,
     comptime work: anytype,
     args: std.meta.ArgsTuple(@TypeOf(work)),
+    comptime done: anytype,
 ) void {
-    cx.state.tasks.spawn(cx.id, work, args);
+    comptime {
+        const Result = node_zig.ReturnOf(work);
+        const takes = for (@typeInfo(@TypeOf(done)).@"fn".params) |param| {
+            if (param.type == Result) break true;
+        } else false;
+        if (Result != void and !takes) {
+            @compileError("the function given to spawn takes no " ++ @typeName(Result));
+        }
+    }
+    cx.state.tasks.spawn(cx.id, work, args, keyOf(done));
 }
 
-/// Hands `value` to the same `pub fn receive` as `spawn` does, once `seconds`
-/// have passed. An equal value that this component still waits for gives way
-/// to it, so asking again puts the moment off. The value is handed over on a
-/// frame of its own, never within the function that asks for it, and it is
-/// dropped when this component is gone by then.
-pub fn after(cx: Context, seconds: f64, value: anytype) void {
-    cx.state.tasks.after(cx.id, cx.state.now + @max(0, seconds), value);
+/// Calls `f` once `seconds` have passed. `f` is one of the functions that
+/// this component, or one around it, lists in `pub const later = .{ ... }`,
+/// and its parameters are filled in by type. A call of `f` that this
+/// component still waits for gives way, so asking again puts the moment off.
+/// `f` runs on a frame of its own, never within the function that asks for
+/// it, and not at all when this component is gone by then.
+pub fn after(cx: Context, seconds: f64, comptime f: anytype) void {
+    cx.state.tasks.after(cx.id, cx.state.now + @max(0, seconds), keyOf(f));
 }
 
 /// The text in the clipboard, or null when it holds none. Like the strings of
