@@ -8,11 +8,6 @@
             .url = "git+https://github.com/Hato1125/thorvg-zig.git#6f03e7ba6dd72eb97032788764e1578e56bf4e20",
             .hash = "thorvg-1.1.2-Bgugee0RAAAnfopTjtaFiBUnIkxRtnjq-Nf15FJbxQIp",
         },
-        .unicorn = .{
-            .url = "git+https://github.com/Hato1125/unicorn.git#e3ff3ba6d811137bcfb5a0f83a2c72007cd9f42b",
-            .hash = "unicorn-0.0.0-Texy3C8FAQBfv4Fhs-_2scKTlNoHM4jHH0UyMZssj67s",
-            .lazy = true,
-        },
         .sdl = .{
             .url = "git+https://github.com/castholm/SDL.git?ref=v0.5.4+3.4.16#b72b3671502a70e109350ecac90afdc480dcfcc6",
             .hash = "sdl-0.5.4+3.4.16-SDL--sQ4qAH3kwC19Zs1kxdHplaSDnWl2MUptZD4AItI",
@@ -22,6 +17,5 @@
         "build.zig",
         "build.zig.zon",
         "src",
-        "assets",
     },
 }
