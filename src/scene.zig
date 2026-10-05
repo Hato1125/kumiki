@@ -62,6 +62,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         wanted: NodeId = 0,
         /// When the last drawing asked for the next one.
         again: f64 = std.math.inf(f64),
+        /// Whether something was built or laid out since the last drawing.
+        changed: bool = true,
 
         const Self = @This();
 
@@ -137,14 +139,22 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         /// Returns false once the implementation reports a close. The scene
         /// must stay where it is from its first frame on, because a function
         /// in the background wakes the implementation where the last frame
-        /// found it.
+        /// found it. Events that change nothing leave the last drawing as it
+        /// is, so a frame draws only when something was built again, the size
+        /// changed, an animation runs, a drawing asked for the time it is, or
+        /// the implementation asks for it or woke without an event.
         pub fn frame(s: *Self) !bool {
             s.state.host.impl = &s.impl;
             s.state.wanted = &s.wanted;
             s.state.tasks.waker.store(&s.impl, .release);
             const due = @min(s.again, s.state.tasks.due());
             var wait = if (s.busy()) 0 else due - s.impl.now();
+            // The frame after an animation ended shows where it ended.
+            const moving = s.state.animating;
+            var seen = false;
+            var redraw = false;
             while (s.impl.next(wait)) |event| : (wait = 0) {
+                seen = true;
                 s.state.now = s.impl.now();
                 switch (event) {
                     .pointer_move => |at| {
@@ -170,6 +180,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                         _ = s.offer(s.state.focus.id(), .{ .text = text });
                     },
                     .active => |active| s.activate(active),
+                    .redraw => redraw = true,
                     .close => return false,
                 }
             }
@@ -178,7 +189,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.receive();
             s.update();
 
+            const still = seen and !redraw and !s.changed and !moving and !s.state.animating;
+            if (still and s.state.now < s.again) return true;
             s.again = std.math.inf(f64);
+            s.changed = false;
             if (try s.impl.begin()) |canvas| {
                 canvas.now = s.state.now;
                 canvas.again = s.again;
@@ -239,6 +253,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 if (walk.first != 0) s.move(&state.focus, s.pathTo(walk.first));
             }
             if (state.built or !std.meta.eql(size, s.size)) {
+                s.changed = true;
                 s.size = size;
                 _ = pass.measure(&s.root, .tight(size));
                 pass.layout(&s.root, .{});
