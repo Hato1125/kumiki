@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const types = @import("types.zig");
+const types = @import("../types.zig");
 const Constraint = types.Constraint;
 const Extent = types.Extent;
 const Point = types.Point;
-const pass = @import("layout.zig");
+const pass = @import("../layout.zig");
 
 pub const Axis = enum { horizontal, vertical };
 pub const MainAlign = enum { start, center, end, between };
@@ -49,6 +49,7 @@ pub fn Flex(comptime axis: Axis) type {
         ) Extent {
             const across = crossOf(c.max);
             const stretched = f.cross == .stretch and !std.math.isInf(across);
+
             return pass.measure(child, .{
                 .min = extent(min, if (stretched) across else 0),
                 .max = extent(max, across),
@@ -60,6 +61,7 @@ pub fn Flex(comptime axis: Axis) type {
             var used = f.gaps(children.len);
             var across: f32 = 0;
             var factors: f32 = 0;
+
             inline for (0..children.len) |i| {
                 const factor = pass.flexOf(&children[i]);
                 if (factor > 0) {

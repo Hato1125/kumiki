@@ -1,12 +1,12 @@
 const std = @import("std");
 
-const types = @import("types.zig");
+const types = @import("../types.zig");
 const Constraint = types.Constraint;
 const Extent = types.Extent;
 const Point = types.Point;
-const pass = @import("layout.zig");
-const mod = @import("mod.zig");
-const ReturnOf = @import("node.zig").ReturnOf;
+const pass = @import("../layout.zig");
+const mod = @import("../mod.zig");
+const ReturnOf = @import("../node.zig").ReturnOf;
 
 /// Stacks one row per element of the slice that `source_fn` returns. Rows
 /// follow the `id` field of the elements when they have one, and their index
@@ -27,14 +27,14 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
         pub const Row = ReturnOf(make);
         pub const keyed = Id != void;
 
-        pub fn gap(list: Self, spacing: f32) Self {
-            return mod.set(list, "spacing", spacing);
+        pub fn gap(self: Self, spacing: f32) Self {
+            return mod.set(self, "spacing", spacing);
         }
 
         /// Takes the settings of `next`. The keys stay, because they belong
         /// to the rows.
-        pub fn adopt(list: *Self, next: Self) void {
-            list.spacing = next.spacing;
+        pub fn adopt(self: *Self, next: Self) void {
+            self.spacing = next.spacing;
         }
 
         /// `make` takes a pointer to the element when its parameter is one,
@@ -57,30 +57,30 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
             if (comptime is_string) gpa.free(id);
         }
 
-        pub fn deinitKeys(list: *Self, gpa: std.mem.Allocator) void {
+        pub fn deinitKeys(self: *Self, gpa: std.mem.Allocator) void {
             if (comptime !keyed) return;
-            for (list.keys.items) |id| freeKey(gpa, id);
-            list.keys.deinit(gpa);
+            for (self.keys.items) |id| freeKey(gpa, id);
+            self.keys.deinit(gpa);
         }
 
-        pub fn measureAll(list: Self, rows: anytype, c: Constraint) Extent {
+        pub fn measureAll(self: Self, rows: anytype, c: Constraint) Extent {
             var size: Extent = .{};
             for (rows.items, 0..) |*row, i| {
                 const row_size = pass.measure(row, .{
                     .max = .{ .width = c.max.width, .height = types.inf },
                 });
                 size.width = @max(size.width, row_size.width);
-                size.height += row_size.height + if (i == 0) 0 else list.spacing;
+                size.height += row_size.height + if (i == 0) 0 else self.spacing;
             }
             if (!std.math.isInf(c.max.width)) size.width = c.max.width;
             return c.constrain(size);
         }
 
-        pub fn layoutAll(list: Self, rows: anytype, at: Point, _: Extent) void {
+        pub fn layoutAll(self: Self, rows: anytype, at: Point, _: Extent) void {
             var y = at.y;
             for (rows.items) |*row| {
                 pass.layout(row, .{ .x = at.x, .y = y });
-                y += row.size.height + list.spacing;
+                y += row.size.height + self.spacing;
             }
         }
 
@@ -97,4 +97,14 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
         pub const animation = mod.animation;
         pub const with = mod.with;
     };
+}
+
+/// `source` returns a slice and `make` turns an element, or a pointer to it,
+/// into the view of its row. The parameters of `source` are filled in by type
+/// like those of `ui.show`.
+pub fn list(
+    comptime source: anytype,
+    comptime make: anytype,
+) List(source, make) {
+    return .{};
 }

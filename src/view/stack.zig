@@ -1,8 +1,9 @@
-const types = @import("types.zig");
+const types = @import("../types.zig");
 const Constraint = types.Constraint;
 const Extent = types.Extent;
 const Point = types.Point;
-const pass = @import("layout.zig");
+const pass = @import("../layout.zig");
+const mod = @import("../mod.zig");
 
 /// Where something smaller sits inside a larger area: 0 is the left or top
 /// edge and 1 is the right or bottom edge.
@@ -56,3 +57,9 @@ pub const Stack = struct {
         }
     }
 };
+
+pub fn stack(
+    children: anytype,
+) mod.Container(mod.Runtime(@TypeOf(children)), Stack) {
+    return .{ .children = children, .config = .{} };
+}

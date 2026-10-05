@@ -14,7 +14,7 @@ const HandlerKind = @import("node.zig").HandlerKind;
 const Resolved = @import("node.zig").Resolved;
 const Painter = @import("paint.zig").Painter;
 const popup_zig = @import("popup.zig");
-const Alignment = @import("stack.zig").Alignment;
+const Alignment = @import("view/stack.zig").Alignment;
 
 const mod = @This();
 
@@ -73,6 +73,16 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
         pub const animation = mod.animation;
         pub const with = mod.with;
     };
+}
+
+/// The children of a container built from the tuple literal `Tuple`. Tuple
+/// literals with compile-time values get comptime fields, which would make
+/// two literals of the same shape different types.
+pub fn Runtime(comptime Tuple: type) type {
+    const fields = @typeInfo(Tuple).@"struct".fields;
+    var element_types: [fields.len]type = undefined;
+    for (fields, 0..) |field, i| element_types[i] = field.type;
+    return @Tuple(&element_types);
 }
 
 /// A copy of `view` with one field changed.
