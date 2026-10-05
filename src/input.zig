@@ -294,6 +294,14 @@ pub fn walkFocus(node: anytype, walk: *FocusWalk) void {
     _ = each(node, .shown, walkFocus, .{walk});
 }
 
+/// Records the focusable nodes of `target` and inside it. Returns whether
+/// `target` is inside `node`.
+pub fn walkFocusIn(node: anytype, target: NodeId, walk: *FocusWalk) bool {
+    if (node.id != target) return each(node, .shown, walkFocusIn, .{ target, walk });
+    walkFocus(node, walk);
+    return true;
+}
+
 fn boundsOf(node: anytype) types.Bounds {
     const at = offsetOf(node);
     return .{

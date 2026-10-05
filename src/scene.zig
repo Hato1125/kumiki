@@ -58,6 +58,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         told_at: Point = .{},
         /// The node that takes the typed text.
         typing: NodeId = 0,
+        /// The component that asked for the focus since the last build.
+        wanted: NodeId = 0,
         /// When the last drawing asked for the next one.
         again: f64 = std.math.inf(f64),
 
@@ -79,6 +81,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 .state = .{
                     .gpa = gpa,
                     .tasks = tasks,
+                    .wanted = undefined,
                     .host = .{
                         .impl = undefined,
                         .paste = paste,
@@ -88,6 +91,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 .root = undefined,
             };
             s.state.host.impl = &s.impl;
+            s.state.wanted = &s.wanted;
             tree.mount(&s.root, root, &s.state, .{});
             return s;
         }
@@ -96,6 +100,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         /// tree goes first, because an `unmount` may spawn one more.
         pub fn deinit(s: *Self) void {
             s.state.host.impl = &s.impl;
+            s.state.wanted = &s.wanted;
             tree.destroy(&s.root, &s.state, .{});
             s.state.tasks.deinit();
             s.impl.deinit();
@@ -134,6 +139,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         /// found it.
         pub fn frame(s: *Self) !bool {
             s.state.host.impl = &s.impl;
+            s.state.wanted = &s.wanted;
             s.state.tasks.waker.store(&s.impl, .release);
             var wait = if (s.busy()) 0 else s.again - s.impl.now();
             while (s.impl.next(wait)) |event| : (wait = 0) {
@@ -222,6 +228,12 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     s.move(path, s.pathTo(path.id()));
                 }
                 if (s.pathTo(s.held).id() == 0) s.held = 0;
+            }
+            if (s.wanted != 0) {
+                var walk: input.FocusWalk = .{ .current = 0 };
+                _ = input.walkFocusIn(&s.root, s.wanted, &walk);
+                s.wanted = 0;
+                if (walk.first != 0) s.move(&state.focus, s.pathTo(walk.first));
             }
             if (state.built or !std.meta.eql(size, s.size)) {
                 s.size = size;

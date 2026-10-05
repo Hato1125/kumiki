@@ -2351,3 +2351,49 @@ test "while a popup is open, only the shortcuts in it run" {
     try press(&s, 'p', command_mod);
     try expectEqualStrings("oqio", trace);
 }
+
+// A bar that shows its input on a shortcut, inside a view with a button
+// before it.
+const Finder = struct {
+    pub const view = ui.column(.{
+        ui.rect().frame(.{ .width = 40, .height = 40 }).tap(nothing),
+        Bar{},
+    });
+
+    fn nothing() void {}
+
+    const Bar = struct {
+        open: bool = false,
+
+        pub const view = ui.when(isOpen, ui.text("field").padding(4).input(jot), ui.rect())
+            .shortcut(keys, show);
+
+        fn isOpen(self: *const Bar) bool {
+            return self.open;
+        }
+
+        fn keys() ui.Chord {
+            return .{ .key = 'f', .command = true };
+        }
+
+        fn show(self: *Bar, cx: ui.Context) void {
+            self.open = true;
+            cx.focus();
+        }
+
+        fn jot() void {}
+    };
+};
+
+test "a component that asks for the focus has it on the first view that takes it, one that the same function brings up too" {
+    var s: Scene(Finder) = try .init(gpa, options, .{});
+    defer s.deinit();
+    try frame(&s);
+    const bar = &s.root.children[0].children[1];
+    const field = &bar.children[0].children[0].children[0];
+
+    try press(&s, 'f', command_mod);
+    try expect(bar.widget.open);
+    try expectEqual(field.id, s.state.focus.id());
+    try expect(s.impl.typing != null);
+}

@@ -30,6 +30,14 @@ pub fn focusVisible(cx: Context) bool {
     return cx.state.keyboard and cx.focused();
 }
 
+/// Moves the focus to the first view in this component that can take it,
+/// once the tree is built with what the function that runs changed, so that a
+/// view it brings up can take it. Nothing happens when the component shows
+/// none.
+pub fn focus(cx: Context) void {
+    cx.state.wanted.* = cx.id;
+}
+
 pub fn hovered(cx: Context) bool {
     return contains(cx.state.hover.slice(), cx.id);
 }

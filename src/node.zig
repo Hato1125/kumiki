@@ -46,11 +46,13 @@ pub fn contains(path: []const NodeId, id: NodeId) bool {
 /// scene at all. `tasks` lives on the heap, because functions in the
 /// background point at it while the scene may still be moved. `inputs` counts
 /// the nodes that take typed text, and `typing` is where the implementation
-/// was asked for it.
+/// was asked for it. `wanted` points at the component that asked for the
+/// focus, where the scene keeps it until the tree is built.
 pub const State = struct {
     gpa: std.mem.Allocator,
     tasks: *Tasks,
     host: Host,
+    wanted: *NodeId,
     inputs: u32 = 0,
     typing: ?types.Bounds = null,
     active: bool = true,
