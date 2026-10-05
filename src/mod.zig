@@ -191,10 +191,10 @@ const Frame = struct {
     max_height: ?f32 = null,
     alignment: Alignment = .center,
 
-    fn outer(fixed: ?f32, max: ?f32, low: f32, high: f32, child: f32) f32 {
-        if (fixed) |size| return std.math.clamp(size, low, high);
+    fn outer(fixed: ?f32, max: ?f32, high: f32, child: f32) f32 {
+        if (fixed) |size| return size;
         if (max) |size| {
-            return if (std.math.isInf(high)) child else @max(child, @min(size, high));
+            return if (std.math.isInf(high)) child else @max(child, size);
         }
         return child;
     }
@@ -212,8 +212,8 @@ const Frame = struct {
             .max = max,
         });
         return c.constrain(.{
-            .width = outer(f.width, f.max_width, c.min.width, c.max.width, size.width),
-            .height = outer(f.height, f.max_height, c.min.height, c.max.height, size.height),
+            .width = outer(f.width, f.max_width, c.max.width, size.width),
+            .height = outer(f.height, f.max_height, c.max.height, size.height),
         });
     }
 
