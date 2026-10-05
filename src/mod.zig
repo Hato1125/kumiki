@@ -135,31 +135,23 @@ const Insets = struct {
         if (Spec == Insets) return spec;
         if (@typeInfo(Spec) != .@"struct") {
             return .{
-                .top = float(spec),
-                .right = float(spec),
-                .bottom = float(spec),
-                .left = float(spec),
+                .top = std.math.lossyCast(f32, spec),
+                .right = std.math.lossyCast(f32, spec),
+                .bottom = std.math.lossyCast(f32, spec),
+                .left = std.math.lossyCast(f32, spec),
             };
         }
         var insets: Insets = .{};
-        if (@hasField(Spec, "x")) insets.left = float(spec.x);
-        if (@hasField(Spec, "x")) insets.right = float(spec.x);
-        if (@hasField(Spec, "y")) insets.top = float(spec.y);
-        if (@hasField(Spec, "y")) insets.bottom = float(spec.y);
+        if (@hasField(Spec, "x")) insets.left = std.math.lossyCast(f32, spec.x);
+        if (@hasField(Spec, "x")) insets.right = std.math.lossyCast(f32, spec.x);
+        if (@hasField(Spec, "y")) insets.top = std.math.lossyCast(f32, spec.y);
+        if (@hasField(Spec, "y")) insets.bottom = std.math.lossyCast(f32, spec.y);
         inline for (@typeInfo(Insets).@"struct".fields) |edge| {
             if (@hasField(Spec, edge.name)) {
-                @field(insets, edge.name) = float(@field(spec, edge.name));
+                @field(insets, edge.name) = std.math.lossyCast(f32, @field(spec, edge.name));
             }
         }
         return insets;
-    }
-
-    fn float(value: anytype) f32 {
-        return switch (@typeInfo(@TypeOf(value))) {
-            .int => @floatFromInt(value),
-            .float => @floatCast(value),
-            else => value,
-        };
     }
 
     pub fn measure(insets: Insets, child: anytype, c: Constraint) Extent {
