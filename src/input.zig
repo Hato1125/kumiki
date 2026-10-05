@@ -524,8 +524,8 @@ pub fn watch(
     told.* = true;
 }
 
-/// Hands the result of a background function to the `receive` of the
-/// component `target`, or of the nearest one around it that takes the
+/// Hands the result of a background function, or a value that was due, to
+/// the `receive` of the component `target`, or of the nearest one around it that takes the
 /// result's type in the one parameter that its owners do not fill in. Returns
 /// whether `target` is inside `node`.
 pub fn deliver(

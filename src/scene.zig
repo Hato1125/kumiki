@@ -92,6 +92,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             };
             s.state.host.impl = &s.impl;
             s.state.wanted = &s.wanted;
+            s.state.now = s.impl.now();
             tree.mount(&s.root, root, &s.state, .{});
             return s;
         }
@@ -141,7 +142,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.state.host.impl = &s.impl;
             s.state.wanted = &s.wanted;
             s.state.tasks.waker.store(&s.impl, .release);
-            var wait = if (s.busy()) 0 else s.again - s.impl.now();
+            const due = @min(s.again, s.state.tasks.due());
+            var wait = if (s.busy()) 0 else due - s.impl.now();
             while (s.impl.next(wait)) |event| : (wait = 0) {
                 s.state.now = s.impl.now();
                 switch (event) {
@@ -188,10 +190,11 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             return true;
         }
 
-        // Hands over what the background functions that have ended returned.
-        // A result is dropped when the component that spawned it is gone.
+        // Hands over what the background functions that have ended returned,
+        // and the values that are due. A result is dropped when the component
+        // that asked for it is gone.
         fn receive(s: *Self) void {
-            while (s.state.tasks.take()) |task| {
+            while (s.state.tasks.take(s.state.now)) |task| {
                 var handled = false;
                 const found = input.deliver(&s.root, task.tag, task, .{}, &s.state, &handled);
                 if (found and !handled) {

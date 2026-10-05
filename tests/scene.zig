@@ -2397,3 +2397,73 @@ test "a component that asks for the focus has it on the first view that takes it
     try expectEqual(field.id, s.state.focus.id());
     try expect(s.impl.typing != null);
 }
+
+const Signal = enum {
+    tick,
+    ring,
+};
+
+// Counts the seconds by itself, and rings a while after it was pressed last.
+const Clock = struct {
+    seconds: u32 = 0,
+    rings: u32 = 0,
+
+    pub const view = ui.rect().frame(.{ .width = 40, .height = 40 }).tap(ask);
+
+    pub fn mount(cx: ui.Context) void {
+        cx.after(1, Signal.tick);
+    }
+
+    pub fn receive(self: *Clock, signal: Signal, cx: ui.Context) void {
+        switch (signal) {
+            .tick => {
+                self.seconds += 1;
+                cx.after(1, Signal.tick);
+            },
+            .ring => self.rings += 1,
+        }
+    }
+
+    fn ask(cx: ui.Context) void {
+        cx.after(0.5, Signal.ring);
+    }
+};
+
+test "a value is handed to receive after a while, and asking for an equal one again puts it off" {
+    var s: Scene(Clock) = try .init(gpa, options, .{});
+    defer s.deinit();
+    const clock = &s.root.widget;
+    const inside: ui.Point = .{ .x = 20, .y = 20 };
+
+    // The scene waits for input no longer than until the value is due.
+    try frame(&s);
+    try frame(&s);
+    try expectEqual(1, s.impl.waited);
+
+    s.impl.seconds = 0.9;
+    try frame(&s);
+    try expectEqual(0, clock.seconds);
+    s.impl.seconds = 1.1;
+    try frame(&s);
+    try expectEqual(1, clock.seconds);
+    s.impl.seconds = 2.2;
+    try frame(&s);
+    try expectEqual(2, clock.seconds);
+
+    try click(&s, inside);
+    s.impl.seconds = 2.5;
+    try click(&s, inside);
+    s.impl.seconds = 2.8;
+    try frame(&s);
+    try expectEqual(0, clock.rings);
+    s.impl.seconds = 3.05;
+    try frame(&s);
+    try expectEqual(1, clock.rings);
+
+    // A value that differs waits on its own.
+    try expectEqual(2, clock.seconds);
+    s.impl.seconds = 3.3;
+    try frame(&s);
+    try expectEqual(3, clock.seconds);
+    try expectEqual(1, clock.rings);
+}

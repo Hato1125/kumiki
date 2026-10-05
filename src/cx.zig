@@ -58,6 +58,15 @@ pub fn spawn(
     cx.state.tasks.spawn(cx.id, work, args);
 }
 
+/// Hands `value` to the same `pub fn receive` as `spawn` does, once `seconds`
+/// have passed. An equal value that this component still waits for gives way
+/// to it, so asking again puts the moment off. The value is handed over on a
+/// frame of its own, never within the function that asks for it, and it is
+/// dropped when this component is gone by then.
+pub fn after(cx: Context, seconds: f64, value: anytype) void {
+    cx.state.tasks.after(cx.id, cx.state.now + @max(0, seconds), value);
+}
+
 /// The text in the clipboard, or null when it holds none. Like the strings of
 /// `print`, it stays valid until this component is built again.
 pub fn paste(cx: Context) ?[]const u8 {
