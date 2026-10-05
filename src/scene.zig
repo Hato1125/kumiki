@@ -192,8 +192,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             const still = seen and !redraw and !s.changed and !moving and !s.state.animating;
             if (still and s.state.now < s.again) return true;
             s.again = std.math.inf(f64);
-            s.changed = false;
             if (try s.impl.begin()) |canvas| {
+                s.changed = false;
                 canvas.now = s.state.now;
                 canvas.again = s.again;
                 paint(&s.root, canvas);
