@@ -40,7 +40,7 @@ pub fn focus(cx: Context) void {
 }
 
 /// Closes the scene: the frame in which the function runs is the last one,
-/// and `ui.run` returns after it.
+/// and `ui.run` returns after it. The `closing` of the root is not asked.
 pub fn close(cx: Context) void {
     cx.state.closed.* = true;
 }

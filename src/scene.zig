@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const invoke = @import("call.zig").invoke;
 const types = @import("types.zig");
 const Extent = types.Extent;
 const Point = types.Point;
@@ -25,6 +26,12 @@ const tree = @import("tree.zig");
 /// area is null, which also ends what an input method is composing;
 /// `copy(text)` puts text into the clipboard and returns whether it took it,
 /// and `paste(allocator)` returns a copy of what it holds, or null.
+///
+/// The root may declare `pub fn closing`, which returns whether the scene
+/// closes when the implementation reports a close, and without which it
+/// does. Its parameters are filled in by type, as described at `invoke` in
+/// call.zig, and the components it receives as mutable pointers are built
+/// again, so that it can bring up a view that asks first.
 pub fn Scene(comptime Impl: type, comptime Root: type) type {
     if (!node_zig.isComponent(Root)) {
         @compileError("the root must be a component with a view");
@@ -141,11 +148,11 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             return s.held != 0 and !node_zig.contains(s.state.hover.slice(), s.held);
         }
 
-        /// Returns false once the implementation reports a close, or a
-        /// function asked for one through its Context. The scene must stay
-        /// where it is from its first frame on, because a function in the
-        /// background wakes the implementation where the last frame
-        /// found it. Events that change nothing leave the last drawing as it
+        /// Returns false once the implementation reports a close that the
+        /// root lets through, or a function closed the scene through its
+        /// Context. The scene must stay where it is from its first frame on,
+        /// because a function in the background wakes the implementation
+        /// where the last frame found it. Events that change nothing leave the last drawing as it
         /// is, so a frame draws only when something was built again, the size
         /// changed, an animation runs, a drawing asked for the time it is, or
         /// the implementation asks for it or woke without an event.
@@ -186,7 +193,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     },
                     .active => |active| s.activate(active),
                     .redraw => redraw = true,
-                    .close => return false,
+                    .close => if (s.mayClose()) return false,
                 }
             }
             s.state.now = s.impl.now();
@@ -351,6 +358,19 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.told = hover.*;
             s.told_at = s.last;
             if (told) s.pending = true;
+        }
+
+        fn mayClose(s: *Self) bool {
+            if (comptime !@hasDecl(Root, "closing")) return true;
+            if (comptime node_zig.ReturnOf(Root.closing) != bool) {
+                @compileError("the closing of " ++ @typeName(Root) ++
+                    " must return a bool");
+            }
+            const owners = .{&s.root};
+            if (invoke(Root.closing, owners, &s.state, {})) return true;
+            tree.markTargets(Root.closing, owners);
+            s.pending = true;
+            return false;
         }
 
         // Returns whether a popup was open to be dismissed.
