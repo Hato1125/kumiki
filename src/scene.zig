@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const invoke = @import("call.zig").invoke;
 const types = @import("types.zig");
 const Extent = types.Extent;
 const Point = types.Point;
@@ -25,6 +26,12 @@ const tree = @import("tree.zig");
 /// area is null, which also ends what an input method is composing;
 /// `copy(text)` puts text into the clipboard and returns whether it took it,
 /// and `paste(allocator)` returns a copy of what it holds, or null.
+///
+/// The root may declare `pub fn closing`, which returns whether the scene
+/// closes when the implementation reports a close, and without which it
+/// does. Its parameters are filled in by type, as described at `invoke` in
+/// call.zig, and the components it receives as mutable pointers are built
+/// again, so that it can bring up a view that asks first.
 pub fn Scene(comptime Impl: type, comptime Root: type) type {
     if (!node_zig.isComponent(Root)) {
         @compileError("the root must be a component with a view");
@@ -60,6 +67,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         typing: NodeId = 0,
         /// The component that asked for the focus since the last build.
         wanted: NodeId = 0,
+        /// Whether a function asked to close the scene.
+        closed: bool = false,
         /// When the last drawing asked for the next one.
         again: f64 = std.math.inf(f64),
         /// Whether something was built or laid out since the last drawing.
@@ -84,6 +93,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .gpa = gpa,
                     .tasks = tasks,
                     .wanted = undefined,
+                    .closed = undefined,
                     .host = .{
                         .impl = undefined,
                         .paste = paste,
@@ -94,6 +104,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             };
             s.state.host.impl = &s.impl;
             s.state.wanted = &s.wanted;
+            s.state.closed = &s.closed;
             s.state.now = s.impl.now();
             tree.mount(&s.root, root, &s.state, .{});
             return s;
@@ -104,6 +115,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         pub fn deinit(s: *Self) void {
             s.state.host.impl = &s.impl;
             s.state.wanted = &s.wanted;
+            s.state.closed = &s.closed;
             tree.destroy(&s.root, &s.state, .{});
             s.state.tasks.deinit();
             s.impl.deinit();
@@ -136,16 +148,18 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             return s.held != 0 and !node_zig.contains(s.state.hover.slice(), s.held);
         }
 
-        /// Returns false once the implementation reports a close. The scene
-        /// must stay where it is from its first frame on, because a function
-        /// in the background wakes the implementation where the last frame
-        /// found it. Events that change nothing leave the last drawing as it
+        /// Returns false once the implementation reports a close that the
+        /// root lets through, or a function closed the scene through its
+        /// Context. The scene must stay where it is from its first frame on,
+        /// because a function in the background wakes the implementation
+        /// where the last frame found it. Events that change nothing leave the last drawing as it
         /// is, so a frame draws only when something was built again, the size
         /// changed, an animation runs, a drawing asked for the time it is, or
         /// the implementation asks for it or woke without an event.
         pub fn frame(s: *Self) !bool {
             s.state.host.impl = &s.impl;
             s.state.wanted = &s.wanted;
+            s.state.closed = &s.closed;
             s.state.tasks.waker.store(&s.impl, .release);
             const due = @min(s.again, s.state.tasks.due());
             var wait = if (s.busy()) 0 else due - s.impl.now();
@@ -179,13 +193,14 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     },
                     .active => |active| s.activate(active),
                     .redraw => redraw = true,
-                    .close => return false,
+                    .close => if (s.mayClose()) return false,
                 }
             }
             s.state.now = s.impl.now();
             if (s.strays()) s.hold(.move);
             s.receive();
             s.update();
+            if (s.closed) return false;
 
             const still = seen and !redraw and !s.changed and !moving and !s.state.animating;
             if (still and s.state.now < s.again) return true;
@@ -343,6 +358,19 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.told = hover.*;
             s.told_at = s.last;
             if (told) s.pending = true;
+        }
+
+        fn mayClose(s: *Self) bool {
+            if (comptime !@hasDecl(Root, "closing")) return true;
+            if (comptime node_zig.ReturnOf(Root.closing) != bool) {
+                @compileError("the closing of " ++ @typeName(Root) ++
+                    " must return a bool");
+            }
+            const owners = .{&s.root};
+            if (invoke(Root.closing, owners, &s.state, {})) return true;
+            tree.markTargets(Root.closing, owners);
+            s.pending = true;
+            return false;
         }
 
         // Returns whether a popup was open to be dismissed.
