@@ -165,15 +165,13 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .button => |button| s.pressButton(button),
                     .wheel => |wheel| {
                         s.hoverAt(wheel.at);
-                        if (s.state.hover.id() != 0) {
-                            _ = s.offer(s.state.hover.id(), .{ .wheel = wheel });
-                        }
+                        const target = s.state.hover.id();
+                        if (target != 0) _ = s.offer(target, .{ .wheel = wheel });
                     },
                     .drop => |drop| {
                         s.hoverAt(.{ .x = drop.x, .y = drop.y });
-                        if (s.state.hover.id() != 0) {
-                            _ = s.offer(s.state.hover.id(), .{ .drop = drop });
-                        }
+                        const target = s.state.hover.id();
+                        if (target != 0) _ = s.offer(target, .{ .drop = drop });
                     },
                     .key => |press| s.pressKey(press),
                     .text => |text| if (s.state.focus.id() != 0) {
