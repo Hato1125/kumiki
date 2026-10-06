@@ -6,6 +6,10 @@ const mod = @import("mod.zig");
 const pass = @import("layout.zig");
 const window = @import("window.zig");
 
+test {
+    @import("std").testing.refAllDecls(@This());
+}
+
 pub const run = window.run;
 pub const Window = window.Window;
 
