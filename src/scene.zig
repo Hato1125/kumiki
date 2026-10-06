@@ -60,6 +60,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         typing: NodeId = 0,
         /// The component that asked for the focus since the last build.
         wanted: NodeId = 0,
+        /// Whether a function asked to close the scene.
+        closed: bool = false,
         /// When the last drawing asked for the next one.
         again: f64 = std.math.inf(f64),
         /// Whether something was built or laid out since the last drawing.
@@ -84,6 +86,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .gpa = gpa,
                     .tasks = tasks,
                     .wanted = undefined,
+                    .closed = undefined,
                     .host = .{
                         .impl = undefined,
                         .paste = paste,
@@ -94,6 +97,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             };
             s.state.host.impl = &s.impl;
             s.state.wanted = &s.wanted;
+            s.state.closed = &s.closed;
             s.state.now = s.impl.now();
             tree.mount(&s.root, root, &s.state, .{});
             return s;
@@ -104,6 +108,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         pub fn deinit(s: *Self) void {
             s.state.host.impl = &s.impl;
             s.state.wanted = &s.wanted;
+            s.state.closed = &s.closed;
             tree.destroy(&s.root, &s.state, .{});
             s.state.tasks.deinit();
             s.impl.deinit();
@@ -136,9 +141,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             return s.held != 0 and !node_zig.contains(s.state.hover.slice(), s.held);
         }
 
-        /// Returns false once the implementation reports a close. The scene
-        /// must stay where it is from its first frame on, because a function
-        /// in the background wakes the implementation where the last frame
+        /// Returns false once the implementation reports a close, or a
+        /// function asked for one through its Context. The scene must stay
+        /// where it is from its first frame on, because a function in the
+        /// background wakes the implementation where the last frame
         /// found it. Events that change nothing leave the last drawing as it
         /// is, so a frame draws only when something was built again, the size
         /// changed, an animation runs, a drawing asked for the time it is, or
@@ -146,6 +152,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         pub fn frame(s: *Self) !bool {
             s.state.host.impl = &s.impl;
             s.state.wanted = &s.wanted;
+            s.state.closed = &s.closed;
             s.state.tasks.waker.store(&s.impl, .release);
             const due = @min(s.again, s.state.tasks.due());
             var wait = if (s.busy()) 0 else due - s.impl.now();
@@ -186,6 +193,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             if (s.strays()) s.hold(.move);
             s.receive();
             s.update();
+            if (s.closed) return false;
 
             const still = seen and !redraw and !s.changed and !moving and !s.state.animating;
             if (still and s.state.now < s.again) return true;

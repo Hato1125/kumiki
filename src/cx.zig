@@ -39,6 +39,12 @@ pub fn focus(cx: Context) void {
     cx.state.wanted.* = cx.id;
 }
 
+/// Closes the scene: the frame in which the function runs is the last one,
+/// and `ui.run` returns after it.
+pub fn close(cx: Context) void {
+    cx.state.closed.* = true;
+}
+
 pub fn hovered(cx: Context) bool {
     return contains(cx.state.hover.slice(), cx.id);
 }
