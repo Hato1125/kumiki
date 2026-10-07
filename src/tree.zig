@@ -292,8 +292,8 @@ fn syncKeyed(
     const keys = &node.widget.keys;
     rows.* = .empty;
     keys.* = .empty;
-    rows.ensureTotalCapacity(state.gpa, elements.len) catch @panic("out of memory");
-    keys.ensureTotalCapacity(state.gpa, elements.len) catch @panic("out of memory");
+    rows.ensureTotalCapacityPrecise(state.gpa, elements.len) catch @panic("out of memory");
+    keys.ensureTotalCapacityPrecise(state.gpa, elements.len) catch @panic("out of memory");
 
     var next: usize = 0;
     for (elements, 0..) |element, i| {
