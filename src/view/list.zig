@@ -8,9 +8,9 @@ const pass = @import("../layout.zig");
 const mod = @import("../mod.zig");
 const ReturnOf = @import("../node.zig").ReturnOf;
 
-/// Stacks one row per element of the slice that `source_fn` returns. Rows
-/// follow the `id` field of the elements when they have one, and their index
-/// otherwise.
+/// The config of a list, which stacks one row per element of the slice that
+/// `source_fn` returns. Rows follow the `id` field of the elements when they
+/// have one, and their index otherwise.
 pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
     const Slice = ReturnOf(source_fn);
     const Element = @typeInfo(Slice).pointer.child;
@@ -18,7 +18,7 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
     const is_string = Id == []const u8;
 
     return struct {
-        spacing: f32 = 0,
+        gap: f32 = 0,
         keys: if (keyed) std.ArrayList(Id) else void = if (keyed) .empty else {},
 
         const Self = @This();
@@ -27,14 +27,10 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
         pub const Row = ReturnOf(make);
         pub const keyed = Id != void;
 
-        pub fn gap(self: Self, spacing: f32) Self {
-            return mod.set(self, "spacing", spacing);
-        }
-
         /// Takes the settings of `next`. The keys stay, because they belong
         /// to the rows.
         pub fn adopt(self: *Self, next: Self) void {
-            self.spacing = next.spacing;
+            self.gap = next.gap;
         }
 
         /// `make` takes a pointer to the element when its parameter is one,
@@ -70,7 +66,7 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
                     .max = .{ .width = c.max.width, .height = types.inf },
                 });
                 size.width = @max(size.width, row_size.width);
-                size.height += row_size.height + if (i == 0) 0 else self.spacing;
+                size.height += row_size.height + if (i == 0) 0 else self.gap;
             }
             if (!std.math.isInf(c.max.width)) size.width = c.max.width;
             return c.constrain(size);
@@ -80,22 +76,9 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
             var y = at.y;
             for (rows.items) |*row| {
                 pass.layout(row, .{ .x = at.x, .y = y });
-                y += row.size.height + self.spacing;
+                y += row.size.height + self.gap;
             }
         }
-
-        pub const padding = mod.padding;
-        pub const frame = mod.frame;
-        pub const flex = mod.flex;
-        pub const bg = mod.bg;
-        pub const clip = mod.clip;
-        pub const opacity = mod.opacity;
-        pub const tap = mod.tap;
-        pub const key = mod.key;
-        pub const input = mod.input;
-        pub const wheel = mod.wheel;
-        pub const animation = mod.animation;
-        pub const with = mod.with;
     };
 }
 
@@ -105,6 +88,6 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
 pub fn list(
     comptime source: anytype,
     comptime make: anytype,
-) List(source, make) {
-    return .{};
+) mod.Container(void, List(source, make)) {
+    return mod.leaf(List(source, make){});
 }
