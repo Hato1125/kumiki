@@ -9,7 +9,6 @@ const keys = input.keys;
 const pass = @import("layout.zig");
 const node_zig = @import("node.zig");
 const NodeId = node_zig.NodeId;
-const Path = node_zig.Path;
 const paint = @import("paint.zig").paint;
 const popup = @import("popup.zig");
 const Tasks = @import("task.zig").Tasks;
@@ -53,6 +52,11 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         size: Extent = .{},
         pointer: ?Point = null,
         pending: bool = true,
+        /// Where the focus, the pointer and the pressed tap are. The state
+        /// shows them to the functions.
+        focus: Path = .{},
+        hover: Path = .{},
+        press: Path = .{},
         /// The node that holds the pointer and the button it holds it with,
         /// and where the pointer was seen last, which is kept while it is
         /// outside the window.
@@ -75,6 +79,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         changed: bool = true,
 
         const Self = @This();
+        const Path = node_zig.Path(node_zig.depthOf(node_zig.Node(Root)));
 
         /// The scene keeps the only copy of `root` that stays up to date, so
         /// what the root allocates is freed by its `unmount`, not by the
@@ -102,9 +107,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 },
                 .root = undefined,
             };
-            s.state.host.impl = &s.impl;
-            s.state.wanted = &s.wanted;
-            s.state.closed = &s.closed;
+            s.settle();
             s.state.now = s.impl.now();
             tree.mount(&s.root, root, &s.state, .{});
             return s;
@@ -113,13 +116,22 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         /// Waits for the functions that still run in the background. The
         /// tree goes first, because an `unmount` may spawn one more.
         pub fn deinit(s: *Self) void {
-            s.state.host.impl = &s.impl;
-            s.state.wanted = &s.wanted;
-            s.state.closed = &s.closed;
+            s.settle();
             tree.destroy(&s.root, &s.state, .{});
             s.state.tasks.deinit();
             s.impl.deinit();
             s.state.gpa.destroy(s.state.tasks);
+        }
+
+        // The scene may have been moved since it was last used, and its paths
+        // change, so what the state points at inside the scene is set anew.
+        fn settle(s: *Self) void {
+            s.state.host.impl = &s.impl;
+            s.state.wanted = &s.wanted;
+            s.state.closed = &s.closed;
+            s.state.focus = s.focus.slice();
+            s.state.hover = s.hover.slice();
+            s.state.press = s.press.slice();
         }
 
         fn wake(impl: *anyopaque) void {
@@ -145,7 +157,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
 
         // Whether a view holds the pointer outside its bounds.
         fn strays(s: *const Self) bool {
-            return s.held != 0 and !node_zig.contains(s.state.hover.slice(), s.held);
+            return s.held != 0 and !node_zig.contains(s.hover.slice(), s.held);
         }
 
         /// Returns false once the implementation reports a close that the
@@ -157,9 +169,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         /// changed, an animation runs, a drawing asked for the time it is, or
         /// the implementation asks for it or woke without an event.
         pub fn frame(s: *Self) !bool {
-            s.state.host.impl = &s.impl;
-            s.state.wanted = &s.wanted;
-            s.state.closed = &s.closed;
+            s.settle();
             s.state.tasks.waker.store(&s.impl, .release);
             const due = @min(s.again, s.state.tasks.due());
             var wait = if (s.busy()) 0 else due - s.impl.now();
@@ -179,17 +189,17 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .button => |button| s.pressButton(button),
                     .wheel => |wheel| {
                         s.hoverAt(wheel.at);
-                        const target = s.state.hover.id();
+                        const target = s.hover.id();
                         if (target != 0) _ = s.offer(target, .{ .wheel = wheel });
                     },
                     .drop => |drop| {
                         s.hoverAt(.{ .x = drop.x, .y = drop.y });
-                        const target = s.state.hover.id();
+                        const target = s.hover.id();
                         if (target != 0) _ = s.offer(target, .{ .drop = drop });
                     },
                     .key => |press| s.pressKey(press),
-                    .text => |text| if (s.state.focus.id() != 0) {
-                        _ = s.offer(s.state.focus.id(), .{ .text = text });
+                    .text => |text| if (s.focus.id() != 0) {
+                        _ = s.offer(s.focus.id(), .{ .text = text });
                     },
                     .active => |active| s.activate(active),
                     .redraw => redraw = true,
@@ -247,14 +257,14 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             popup.advance(&s.root, state);
 
             if (state.stale) {
-                var focus = s.pathTo(state.focus.id());
+                var focus = s.pathTo(s.focus.id());
                 if (focus.id() == 0) {
                     var anchor: NodeId = 0;
-                    _ = popup.anchorOf(&s.root, state.focus.slice(), &anchor);
+                    _ = popup.anchorOf(&s.root, s.focus.slice(), &anchor);
                     focus = s.pathTo(anchor);
                 }
-                s.move(&state.focus, focus);
-                inline for (.{ &state.hover, &state.press }) |path| {
+                s.move(&s.focus, focus);
+                inline for (.{ &s.hover, &s.press }) |path| {
                     s.move(path, s.pathTo(path.id()));
                 }
                 if (s.pathTo(s.held).id() == 0) s.held = 0;
@@ -263,7 +273,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 var walk: input.FocusWalk = .{ .current = 0 };
                 _ = input.walkFocusIn(&s.root, s.wanted, &walk);
                 s.wanted = 0;
-                if (walk.first != 0) s.move(&state.focus, s.pathTo(walk.first));
+                if (walk.first != 0) s.move(&s.focus, s.pathTo(walk.first));
             }
             if (state.built or !std.meta.eql(size, s.size)) {
                 s.changed = true;
@@ -283,7 +293,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // on both sides instead of going on in the next input.
         fn retype(s: *Self) void {
             var found: input.Typing = .{};
-            const focus = s.state.focus.id();
+            const focus = s.focus.id();
             if (s.state.active and focus != 0) {
                 _ = input.typingArea(&s.root, focus, &found);
             }
@@ -311,6 +321,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             if (next.id() == path.id()) return;
             tree.markChanged(&s.root, path.slice(), next.slice());
             path.* = next;
+            s.settle();
             s.pending = true;
         }
 
@@ -319,7 +330,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         fn setKeyboard(s: *Self, keyboard: bool) void {
             if (keyboard == s.state.keyboard) return;
             s.state.keyboard = keyboard;
-            tree.markChanged(&s.root, s.state.focus.slice(), &.{});
+            tree.markChanged(&s.root, s.focus.slice(), &.{});
             s.pending = true;
         }
 
@@ -335,7 +346,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     _ = input.hit(&s.root, point, &path);
                 }
             }
-            s.move(&s.state.hover, path);
+            s.move(&s.hover, path);
             s.watch();
         }
 
@@ -344,7 +355,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // the next hit.
         fn watch(s: *Self) void {
             if (comptime !input.watches(@TypeOf(s.root))) return;
-            const hover = &s.state.hover;
+            const hover = &s.hover;
             const moved = !std.meta.eql(s.last, s.told_at);
             if (!moved and hover.id() == s.told.id()) return;
 
@@ -398,12 +409,12 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         fn activate(s: *Self, active: bool) void {
             if (active == s.state.active) return;
             s.state.active = active;
-            tree.markChanged(&s.root, s.state.focus.slice(), &.{});
+            tree.markChanged(&s.root, s.focus.slice(), &.{});
             s.pending = true;
             if (active) return;
             s.hold(.cancel);
             s.held = 0;
-            s.move(&s.state.press, .{});
+            s.move(&s.press, .{});
         }
 
         // A press outside the open popups dismisses them. The left button
@@ -417,13 +428,12 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // is let go. Otherwise a tap fires when the left button goes up over
         // the tap it went down on.
         fn pressButton(s: *Self, button: input.MouseButtonEvent) void {
-            const state = &s.state;
             s.hoverAt(.{ .x = button.x, .y = button.y });
             const left = button.button == .left;
 
             if (button.down) {
                 if (s.held != 0) return;
-                if (state.hover.id() == 0 and s.dismiss()) {
+                if (s.hover.id() == 0 and s.dismiss()) {
                     if (left) return;
                     s.update();
                     s.hoverAt(.{ .x = button.x, .y = button.y });
@@ -431,12 +441,12 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 var found: input.Nearest = .{};
                 if (left) {
                     s.setKeyboard(false);
-                    _ = input.nearest(&s.root, state.hover.id(), &found);
+                    _ = input.nearest(&s.root, s.hover.id(), &found);
                     if (found.focusable != 0) {
-                        s.move(&state.focus, state.hover.from(found.focusable));
+                        s.move(&s.focus, s.hover.from(found.focusable));
                     }
                 }
-                s.held = if (state.hover.id() == 0) 0 else s.offer(state.hover.id(), .{ .pointer = .{
+                s.held = if (s.hover.id() == 0) 0 else s.offer(s.hover.id(), .{ .pointer = .{
                     .phase = .down,
                     .button = button.button,
                     .x = button.x,
@@ -446,9 +456,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 } });
                 s.held_by = button.button;
                 if (s.held != 0) {
-                    s.move(&state.press, .{});
+                    s.move(&s.press, .{});
                 } else if (left) {
-                    s.move(&state.press, state.hover.from(found.tap));
+                    s.move(&s.press, s.hover.from(found.tap));
                 }
                 return;
             }
@@ -460,9 +470,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 return;
             }
             if (!left) return;
-            const target = state.press.id();
-            s.move(&state.press, .{});
-            if (target != 0 and node_zig.contains(state.hover.slice(), target)) {
+            const target = s.press.id();
+            s.move(&s.press, .{});
+            if (target != 0 and node_zig.contains(s.hover.slice(), target)) {
                 _ = s.offer(target, .click);
             }
         }
@@ -472,27 +482,26 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // inside the one in front, with the up and down keys too, and Escape
         // dismisses the popups instead.
         fn pressKey(s: *Self, press: input.KeyPress) void {
-            const state = &s.state;
             if (press.down and !press.isModifier()) s.setKeyboard(true);
-            if (state.focus.id() != 0 and s.offer(state.focus.id(), .{ .key = press }) != 0) {
+            if (s.focus.id() != 0 and s.offer(s.focus.id(), .{ .key = press }) != 0) {
                 return;
             }
             if (!press.down) return;
             if (s.shortcut(press)) return;
 
             if (press.key == keys.escape) {
-                if (!s.dismiss()) s.move(&state.focus, .{});
+                if (!s.dismiss()) s.move(&s.focus, .{});
                 return;
             }
             const tab = press.key == keys.tab;
             const arrow = press.key == keys.up or press.key == keys.down;
             if (!tab and !arrow) return;
-            var walk: input.FocusWalk = .{ .current = state.focus.id() };
+            var walk: input.FocusWalk = .{ .current = s.focus.id() };
             const inside = popup.walkFocus(&s.root, &walk);
             if (!inside and !tab) return;
             if (!inside) input.walkFocus(&s.root, &walk);
             const backward = if (tab) press.shift() else press.key == keys.up;
-            s.move(&state.focus, s.pathTo(walk.result(backward)));
+            s.move(&s.focus, s.pathTo(walk.result(backward)));
         }
 
         // Returns whether a shortcut ran.
