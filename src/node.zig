@@ -7,36 +7,71 @@ const types = @import("types.zig");
 /// Counts up from 1. 0 stands for no node.
 pub const NodeId = u32;
 
-/// A node and its ancestors, the node itself first.
-pub const Path = struct {
-    ids: [128]NodeId = undefined,
-    len: usize = 0,
+/// A node and its ancestors, the node itself first, in a tree that is `depth`
+/// nodes deep, as `depthOf` counts it.
+pub fn Path(comptime depth: usize) type {
+    return struct {
+        ids: [depth]NodeId = undefined,
+        len: usize = 0,
 
-    pub fn slice(path: *const Path) []const NodeId {
-        return path.ids[0..path.len];
-    }
+        const Self = @This();
 
-    pub fn id(path: *const Path) NodeId {
-        return if (path.len == 0) 0 else path.ids[0];
-    }
+        pub fn slice(path: *const Self) []const NodeId {
+            return path.ids[0..path.len];
+        }
 
-    pub fn push(path: *Path, node: NodeId) void {
-        if (path.len == path.ids.len) return;
-        path.ids[path.len] = node;
-        path.len += 1;
-    }
+        pub fn id(path: *const Self) NodeId {
+            return if (path.len == 0) 0 else path.ids[0];
+        }
 
-    /// The part of the path from `node` up to the root.
-    pub fn from(path: *const Path, node: NodeId) Path {
-        var tail: Path = .{};
-        const start = std.mem.indexOfScalar(NodeId, path.slice(), node) orelse return tail;
-        for (path.ids[start..path.len]) |ancestor| tail.push(ancestor);
-        return tail;
-    }
-};
+        pub fn push(path: *Self, node: NodeId) void {
+            path.ids[path.len] = node;
+            path.len += 1;
+        }
+
+        /// The part of the path from `node` up to the root.
+        pub fn from(path: *const Self, node: NodeId) Self {
+            var tail: Self = .{};
+            const start = std.mem.indexOfScalar(NodeId, path.slice(), node) orelse return tail;
+            for (path.ids[start..path.len]) |ancestor| tail.push(ancestor);
+            return tail;
+        }
+    };
+}
 
 pub fn contains(path: []const NodeId, id: NodeId) bool {
     return std.mem.indexOfScalar(NodeId, path, id) != null;
+}
+
+/// How many nodes lie on the longest way from a node of type `N` down to a
+/// leaf, the node itself included: no path in its tree is longer.
+pub fn depthOf(comptime N: type) usize {
+    return Depth(N).of;
+}
+
+// A large tree would exceed the branch quota when counted in one evaluation,
+// so every type of node gets a declaration of its own, which counts apart.
+fn Depth(comptime N: type) type {
+    return struct {
+        const of: usize = 1 + inside: {
+            const Inside = @FieldType(N, "children");
+            if (Inside == void) break :inside 0;
+
+            if (@hasField(Inside, "items")) {
+                break :inside Depth(
+                    @typeInfo(@FieldType(Inside, "items"))
+                        .pointer
+                        .child,
+                ).of;
+            }
+
+            var deepest: usize = 0;
+            for (@typeInfo(Inside).@"struct".fields) |child| {
+                deepest = @max(deepest, Depth(child.type).of);
+            }
+            break :inside deepest;
+        };
+    };
 }
 
 /// What a scene shares with every pass over its tree. `animating`, `built` and
@@ -49,7 +84,8 @@ pub fn contains(path: []const NodeId, id: NodeId) bool {
 /// the nodes that take typed text, and `typing` is where the implementation
 /// was asked for it. `wanted` points at the component that asked for the
 /// focus, where the scene keeps it until the tree is built, and `closed` at
-/// whether a function asked to close the scene.
+/// whether a function asked to close the scene. `focus`, `hover` and `press`
+/// are the paths that the scene keeps.
 pub const State = struct {
     gpa: std.mem.Allocator,
     tasks: *Tasks,
@@ -64,9 +100,9 @@ pub const State = struct {
     animating: bool = false,
     built: bool = false,
     stale: bool = false,
-    focus: Path = .{},
-    hover: Path = .{},
-    press: Path = .{},
+    focus: []const NodeId = &.{},
+    hover: []const NodeId = &.{},
+    press: []const NodeId = &.{},
     keyboard: bool = false,
 };
 

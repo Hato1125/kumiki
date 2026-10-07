@@ -22,7 +22,7 @@ size: types.Extent,
 /// component or inside it. Nothing has the focus while the keyboard is with
 /// another window.
 pub fn focused(cx: Context) bool {
-    return cx.state.active and contains(cx.state.focus.slice(), cx.id);
+    return cx.state.active and contains(cx.state.focus, cx.id);
 }
 
 /// A component shows its focus only after the keyboard was used, so that a
@@ -46,11 +46,11 @@ pub fn close(cx: Context) void {
 }
 
 pub fn hovered(cx: Context) bool {
-    return contains(cx.state.hover.slice(), cx.id);
+    return contains(cx.state.hover, cx.id);
 }
 
 pub fn pressed(cx: Context) bool {
-    return contains(cx.state.press.slice(), cx.id);
+    return contains(cx.state.press, cx.id);
 }
 
 /// Runs `work(args...)` on a thread of its own, where it must not touch the
