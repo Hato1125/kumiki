@@ -199,6 +199,8 @@ pub const Event = union(enum) {
     text: TextInput,
     /// Whether the keyboard is with the window.
     active: bool,
+    /// What was drawn is lost, so the next frame draws again.
+    redraw,
     close,
 };
 

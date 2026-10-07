@@ -2,6 +2,7 @@ const std = @import("std");
 
 const call = @import("call.zig");
 const invoke = call.invoke;
+const leaf = @import("mod.zig").leaf;
 const node_zig = @import("node.zig");
 const Provided = node_zig.Provided;
 const Resolved = node_zig.Resolved;
@@ -38,7 +39,8 @@ fn resolve(
     owners: anytype,
 ) Resolved(@TypeOf(value)) {
     const View = @TypeOf(value);
-    return if (comptime isShow(View)) invoke(View.func, owners, state, {}) else value;
+    if (comptime !isShow(View)) return value;
+    return invoke(@FieldType(View, "config").func, owners, state, {});
 }
 
 /// Builds the node of `value` in `node`. A node holds the nodes of everything
@@ -59,6 +61,7 @@ pub fn mount(
     if (comptime isShow(View)) {
         return mount(node, resolve(value, state, owners), state, owners);
     }
+    if (comptime node_zig.isBare(View)) return mount(node, leaf(value), state, owners);
 
     state.next_id += 1;
     node.id = state.next_id;
@@ -75,11 +78,9 @@ pub fn mount(
         if (comptime provides(View)) node.given = provided(View, inner, state);
         mount(&node.children[0], View.view, state, inner);
     } else if (comptime isList(View)) {
-        node.widget = value;
+        node.widget = value.config;
         node.children = .empty;
         syncList(node, state, owners);
-    } else if (comptime !isContainer(View)) {
-        node.widget = value;
     } else if (comptime isAnimated(View)) {
         const target = resolve(value.children[0], state, owners);
         node.widget = .{ .spec = value.config.spec, .tween = .init(target) };
@@ -92,6 +93,7 @@ pub fn mount(
         if (comptime @hasDecl(@TypeOf(value.config), "cond")) {
             node.widget.active = invoke(@TypeOf(value.config).cond, owners, state, {});
         }
+        if (comptime @TypeOf(value.children) == void) return;
         inline for (0..value.children.len) |i| {
             mount(&node.children[i], value.children[i], state, owners);
         }
@@ -134,16 +136,15 @@ fn apply(
     if (comptime isShow(View)) {
         return apply(node, resolve(value, state, owners), state, owners, .function);
     }
+    if (comptime node_zig.isBare(View)) return apply(node, leaf(value), state, owners, origin);
 
     if (comptime isComponent(View)) {
         if (origin == .view) return;
         if (!std.meta.eql(node.widget, value)) node.dirty = true;
         node.widget = value;
     } else if (comptime isList(View)) {
-        if (origin == .function) node.widget.adopt(value);
+        if (origin == .function) node.widget.adopt(value.config);
         syncList(node, state, owners);
-    } else if (comptime !isContainer(View)) {
-        if (origin == .function) node.widget = value;
     } else if (comptime isAnimated(View)) {
         const Child = @TypeOf(value.children[0]);
         const spec = value.config.spec;
@@ -168,6 +169,7 @@ fn apply(
         } else if (origin == .function) {
             node.widget = value.config;
         }
+        if (comptime @TypeOf(value.children) == void) return;
         inline for (0..value.children.len) |i| {
             apply(&node.children[i], value.children[i], state, owners, origin);
         }

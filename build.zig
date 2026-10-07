@@ -32,4 +32,7 @@ pub fn build(b: *std.Build) void {
     katagi.addImport("c", translate_c.createModule());
     katagi.linkLibrary(thorvg);
     katagi.linkLibrary(sdl);
+
+    const check = b.addTest(.{ .root_module = katagi });
+    b.default_step.dependOn(&check.step);
 }
