@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Container = @import("mod.zig").Container;
 const Tasks = @import("task.zig").Tasks;
 const types = @import("types.zig");
 
@@ -77,22 +78,40 @@ pub const Host = struct {
     copy: *const fn (*anyopaque, []const u8) bool,
 };
 
-pub fn isShow(comptime T: type) bool {
-    return @hasDecl(T, "func");
-}
-
 pub fn isComponent(comptime T: type) bool {
     return @hasDecl(T, "view");
 }
 
-pub fn isList(comptime T: type) bool {
-    return @hasDecl(T, "source");
+/// Every view but a component is a container: `children`, which a leaf has
+/// none of, and a `config` that measures, places and paints them.
+pub fn isContainer(comptime T: type) bool {
+    return !isComponent(T) and @hasField(T, "children");
 }
 
-/// A container is made of `children` and a `config` that measures, places and
-/// paints them.
-pub fn isContainer(comptime T: type) bool {
-    return @hasField(T, "children");
+fn configHas(comptime View: type, comptime name: []const u8) bool {
+    return isContainer(View) and @hasDecl(@FieldType(View, "config"), name);
+}
+
+pub fn isShow(comptime View: type) bool {
+    return configHas(View, "func");
+}
+
+/// Whether `T` is the view of a list or its config, which is its widget.
+pub fn isList(comptime T: type) bool {
+    return @hasDecl(T, "source") or configHas(T, "source");
+}
+
+/// A struct that is neither a component nor a container, such as one of a
+/// user's that measures and paints itself, stands for a leaf with it as the
+/// config.
+pub fn isBare(comptime T: type) bool {
+    return @typeInfo(T) == .@"struct" and !isComponent(T) and !isContainer(T);
+}
+
+/// The view that a value stands for: a bare struct is given the container of
+/// a leaf.
+pub fn Normalized(comptime View: type) type {
+    return if (isBare(View)) Container(void, View) else View;
 }
 
 pub const HandlerKind = enum {
@@ -165,7 +184,7 @@ pub fn Provided(comptime View: type) type {
 }
 
 pub fn Resolved(comptime View: type) type {
-    return if (isShow(View)) ReturnOf(View.func) else View;
+    return if (isShow(View)) ReturnOf(@FieldType(View, "config").func) else View;
 }
 
 // Whether a node of `View` keeps its position. One that leaves its children
@@ -173,7 +192,7 @@ pub fn Resolved(comptime View: type) type {
 // keeps none.
 fn keepsOffset(comptime View: type) bool {
     if (isComponent(View)) return false;
-    if (!isContainer(View)) return true;
+    if (@FieldType(View, "children") == void) return true;
     const Config = @FieldType(View, "config");
     return @hasDecl(Config, "layout") or @hasDecl(Config, "layoutAll");
 }
@@ -187,7 +206,7 @@ pub fn Node(comptime View: type) type {
         id: NodeId,
         offset: if (keepsOffset(View)) types.Point else void,
         size: types.Extent,
-        widget: if (isContainer(View) and !isComponent(View)) @FieldType(View, "config") else View,
+        widget: if (isContainer(View)) @FieldType(View, "config") else View,
         children: Children(View),
         dirty: if (isComponent(View)) bool else void,
         arena: if (isComponent(View)) std.heap.ArenaAllocator.State else void,
@@ -196,7 +215,7 @@ pub fn Node(comptime View: type) type {
 }
 
 pub fn NodeOf(comptime View: type) type {
-    return Node(Resolved(View));
+    return Node(Normalized(Resolved(View)));
 }
 
 /// Where a node is: at its own offset, or where its last child is for a node
@@ -208,9 +227,13 @@ pub fn offsetOf(node: anytype) types.Point {
 
 fn Children(comptime View: type) type {
     if (isComponent(View)) return struct { NodeOf(@TypeOf(View.view)) };
-    if (isList(View)) return std.ArrayList(Node(View.Row));
-    if (!isContainer(View)) return void;
-    const fields = @typeInfo(@FieldType(View, "children")).@"struct".fields;
+    if (!isContainer(View)) {
+        @compileError(@typeName(View) ++ " is no view: not a struct");
+    }
+    if (isList(View)) return std.ArrayList(Node(@FieldType(View, "config").Row));
+    const Inside = @FieldType(View, "children");
+    if (Inside == void) return void;
+    const fields = @typeInfo(Inside).@"struct".fields;
     var element_types: [fields.len]type = undefined;
     for (fields, 0..) |field, i| element_types[i] = NodeOf(field.type);
     return @Tuple(&element_types);

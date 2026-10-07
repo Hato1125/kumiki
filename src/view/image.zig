@@ -11,15 +11,12 @@ const Painter = @import("../paint.zig").Painter;
 /// large as fits inside, or as small as covers it with the rest cut off.
 pub const Fit = enum { fill, contain, cover };
 
-/// An image at its own size, or smaller with the same shape where space is
-/// short. With a fit it takes the space offered instead, like a rect.
+/// The config of an image at its own size, or smaller with the same shape
+/// where space is short. With a fit it takes the space offered instead, like
+/// a rect. Its settings are methods of the container.
 pub const Picture = struct {
     source: ?canvas.Image,
     fitting: ?Fit = null,
-
-    pub fn fit(picture: Picture, how: Fit) Picture {
-        return mod.set(picture, "fitting", how);
-    }
 
     pub fn measure(picture: Picture, c: Constraint) Extent {
         const natural: Extent = if (picture.source) |source| source.size() else .{};
@@ -60,27 +57,9 @@ pub const Picture = struct {
         p.canvas.image(source, area);
         if (covers) p.canvas.popLayer(p.bounds, 0, 255);
     }
-
-    pub const padding = mod.padding;
-    pub const frame = mod.frame;
-    pub const flex = mod.flex;
-    pub const bg = mod.bg;
-    pub const clip = mod.clip;
-    pub const opacity = mod.opacity;
-    pub const tap = mod.tap;
-    pub const key = mod.key;
-    pub const input = mod.input;
-    pub const wheel = mod.wheel;
-    pub const pointer = mod.pointer;
-    pub const hover = mod.hover;
-    pub const drop = mod.drop;
-    pub const popup = mod.popup;
-    pub const shortcut = mod.shortcut;
-    pub const animation = mod.animation;
-    pub const with = mod.with;
 };
 
 /// Shows `source`, or nothing while it is null.
-pub fn image(source: ?canvas.Image) Picture {
-    return .{ .source = source };
+pub fn image(source: ?canvas.Image) mod.Container(void, Picture) {
+    return mod.leaf(Picture{ .source = source });
 }

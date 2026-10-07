@@ -51,9 +51,9 @@ pub const Canvas = canvas.Canvas;
 pub const Path = canvas.Path;
 pub const Corners = canvas.Corners;
 
-pub const Text = @import("view/text.zig").Text;
-pub const Rect = @import("view/rect.zig").Rect;
-pub const Picture = @import("view/image.zig").Picture;
+pub const Text = mod.Container(void, @import("view/text.zig").Text);
+pub const Rect = mod.Container(void, @import("view/rect.zig").Rect);
+pub const Picture = mod.Container(void, @import("view/image.zig").Picture);
 pub const Image = canvas.Image;
 
 pub const show = @import("view/show.zig").show;

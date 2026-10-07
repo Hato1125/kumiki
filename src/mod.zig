@@ -1,5 +1,6 @@
-//! A modifier is a method of every view that wraps the view in a Container:
-//! children and a config that measures, places and paints them.
+//! Every view is a Container: children and a config that measures, places
+//! and paints them. A leaf has no children, and its config measures and
+//! paints itself. A modifier is a method that wraps the view in another one.
 
 const std = @import("std");
 
@@ -36,9 +37,9 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
             };
         }
 
-        // The settings of rows, columns and stacks. A declaration is
-        // analyzed only when it is used, so each exists for the configs
-        // with a field of that name.
+        // The settings of the configs. A declaration is analyzed only when
+        // it is used, so each exists for the configs with a field of that
+        // name.
         pub fn gap(self: Self, value: @FieldType(Config, "gap")) Self {
             return self.set("gap", value);
         }
@@ -53,6 +54,67 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
 
         pub fn alignment(self: Self, value: @FieldType(Config, "alignment")) Self {
             return self.set("alignment", value);
+        }
+
+        pub fn size(self: Self, px: @FieldType(Config, "font_size")) Self {
+            return self.set("font_size", px);
+        }
+
+        pub fn color(self: Self, value: @FieldType(Config, "text_color")) Self {
+            return self.set("text_color", value);
+        }
+
+        /// `name` is the file name of a loaded font without its extension.
+        pub fn font(self: Self, name: [:0]const u8) Self {
+            return self.set("font_name", name);
+        }
+
+        /// The font for the characters that the font has no glyph for.
+        pub fn fallback(self: Self, name: [:0]const u8) Self {
+            return self.set("fallback_name", name);
+        }
+
+        pub fn lineHeight(self: Self, px: f32) Self {
+            return self.set("line_height", px);
+        }
+
+        pub fn tracking(self: Self, px: @FieldType(Config, "letter_spacing")) Self {
+            return self.set("letter_spacing", px);
+        }
+
+        pub fn fill(self: Self, value: @FieldType(Config, "fill_color")) Self {
+            return self.set("fill_color", value);
+        }
+
+        /// The stroke is drawn inside the rectangle.
+        pub fn stroke(
+            self: Self,
+            value: @FieldType(Config, "stroke_color"),
+            width: @FieldType(Config, "stroke_width"),
+        ) Self {
+            return self.set("stroke_color", value).set("stroke_width", width);
+        }
+
+        pub fn radius(self: Self, r: @FieldType(Config, "corner")) Self {
+            return self.set("corner", r);
+        }
+
+        pub fn fit(self: Self, how: @FieldType(Config, "fitting")) Self {
+            return self.set("fitting", how);
+        }
+
+        // What a leaf can be asked outside the tree, such as the width of a
+        // text for a caret. Each exists for the configs that answer it.
+        pub fn measure(self: Self, c: Constraint) Extent {
+            return self.config.measure(c);
+        }
+
+        pub fn advance(self: Self) f32 {
+            return self.config.advance();
+        }
+
+        pub fn indexAt(self: Self, x: f32) usize {
+            return self.config.indexAt(x);
         }
 
         pub const padding = mod.padding;
@@ -73,6 +135,11 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
         pub const animation = mod.animation;
         pub const with = mod.with;
     };
+}
+
+/// The view of a config that measures and paints itself.
+pub fn leaf(config: anytype) Container(void, @TypeOf(config)) {
+    return .{ .children = {}, .config = config };
 }
 
 /// The children of a container built from the tuple literal `Tuple`. Tuple
