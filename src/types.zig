@@ -6,6 +6,30 @@ pub const Point = struct { x: f32 = 0, y: f32 = 0 };
 pub const Extent = struct { width: f32 = 0, height: f32 = 0 };
 pub const Bounds = struct { x: f32 = 0, y: f32 = 0, w: f32 = 0, h: f32 = 0 };
 
+/// Where something smaller sits inside a larger area: 0 is the left or top
+/// edge and 1 is the right or bottom edge.
+pub const Alignment = struct {
+    x: f32 = 0.5,
+    y: f32 = 0.5,
+
+    pub const top_left: Alignment = .{ .x = 0, .y = 0 };
+    pub const top: Alignment = .{ .x = 0.5, .y = 0 };
+    pub const top_right: Alignment = .{ .x = 1, .y = 0 };
+    pub const left: Alignment = .{ .x = 0, .y = 0.5 };
+    pub const center: Alignment = .{ .x = 0.5, .y = 0.5 };
+    pub const right: Alignment = .{ .x = 1, .y = 0.5 };
+    pub const bottom_left: Alignment = .{ .x = 0, .y = 1 };
+    pub const bottom: Alignment = .{ .x = 0.5, .y = 1 };
+    pub const bottom_right: Alignment = .{ .x = 1, .y = 1 };
+
+    pub fn place(a: Alignment, at: Point, outer: Extent, inner: Extent) Point {
+        return .{
+            .x = at.x + (outer.width - inner.width) * a.x,
+            .y = at.y + (outer.height - inner.height) * a.y,
+        };
+    }
+};
+
 /// The bytes of a text from `start` up to `end`.
 pub const Range = struct {
     start: usize = 0,
