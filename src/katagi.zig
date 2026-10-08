@@ -68,24 +68,5 @@ pub const column = @import("view/column.zig").column;
 pub const stack = @import("view/stack.zig").stack;
 pub const list = @import("view/list.zig").list;
 pub const when = @import("view/when.zig").when;
-
-pub fn Each(
-    comptime n: usize,
-    comptime F: anytype,
-    comptime args: anytype,
-) type {
-    var element_types: [n]type = undefined;
-    for (0..n) |i| element_types[i] = @call(.auto, F, args ++ .{i});
-    return @Tuple(&element_types);
-}
-
-/// The tuple `.{ F(args..., 0){}, ..., F(args..., n - 1){} }` of components.
-pub fn each(
-    comptime n: usize,
-    comptime F: anytype,
-    comptime args: anytype,
-) Each(n, F, args) {
-    var components: Each(n, F, args) = undefined;
-    inline for (0..n) |i| components[i] = .{};
-    return components;
-}
+pub const each = @import("view/each.zig").each;
+pub const Each = @import("view/each.zig").Each;
