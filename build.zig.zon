@@ -1,6 +1,6 @@
 .{
     .name = .kumiki,
-    .version = "0.0.0",
+    .version = "0.0.2",
     .fingerprint = 0xdeee8564638e6092,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
