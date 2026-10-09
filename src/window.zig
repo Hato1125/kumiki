@@ -17,7 +17,7 @@ pub const Window = struct {
     /// `font` is the TTF or OTF file of the text that names no font, and
     /// `fonts` are more files for the text that asks for them by name.
     pub const Options = struct {
-        title: [:0]const u8 = "katagi",
+        title: [:0]const u8 = "kumiki",
         width: u32 = 800,
         height: u32 = 600,
         min: Extent = .{},

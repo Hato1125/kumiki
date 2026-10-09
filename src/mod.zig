@@ -6,6 +6,7 @@ const std = @import("std");
 
 const anim = @import("anime.zig");
 const types = @import("types.zig");
+const Alignment = types.Alignment;
 const Color = types.Color;
 const Constraint = types.Constraint;
 const Extent = types.Extent;
@@ -15,7 +16,6 @@ const HandlerKind = @import("node.zig").HandlerKind;
 const Resolved = @import("node.zig").Resolved;
 const Painter = @import("paint.zig").Painter;
 const popup_zig = @import("popup.zig");
-const Alignment = @import("view/stack.zig").Alignment;
 
 const mod = @This();
 

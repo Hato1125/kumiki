@@ -6,7 +6,6 @@ const call = @import("call.zig");
 const invoke = call.invoke;
 const node_zig = @import("node.zig");
 const NodeId = node_zig.NodeId;
-const Path = node_zig.Path;
 const State = node_zig.State;
 const contains = node_zig.contains;
 const each = node_zig.each;
@@ -206,7 +205,7 @@ pub const Event = union(enum) {
 
 /// Collects `target` and its ancestors. Like the other searches for input, it
 /// passes over what a `when` does not show.
-pub fn findPath(node: anytype, target: NodeId, path: *Path) bool {
+pub fn findPath(node: anytype, target: NodeId, path: anytype) bool {
     if (node.id != target and !each(node, .shown, findPath, .{ target, path })) {
         return false;
     }
@@ -216,7 +215,7 @@ pub fn findPath(node: anytype, target: NodeId, path: *Path) bool {
 
 /// Collects the deepest node at `at` and its ancestors. Later children are in
 /// front of earlier ones.
-pub fn hit(node: anytype, at: Point, path: *Path) bool {
+pub fn hit(node: anytype, at: Point, path: anytype) bool {
     const origin = offsetOf(node);
     const x = at.x - origin.x;
     const y = at.y - origin.y;
@@ -458,8 +457,7 @@ pub fn shortcut(
 ) void {
     if (comptime !binds(@TypeOf(node.*))) return;
     const offer: Offer = .{ .shortcut = press };
-    const focus = state.focus.id();
-    if (focus != 0) _ = bubble(node, focus, offer, owners, state, by);
+    if (state.focus.len != 0) _ = bubble(node, state.focus[0], offer, owners, state, by);
     if (by.* == 0) _ = sweep(node, offer, owners, state, by);
 }
 

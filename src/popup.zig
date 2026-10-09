@@ -11,14 +11,13 @@ const Canvas = @import("canvas.zig").Canvas;
 const input = @import("input.zig");
 const pass = @import("layout.zig");
 const node_zig = @import("node.zig");
-const Path = node_zig.Path;
 const State = node_zig.State;
 const each = node_zig.each;
 const isPopup = node_zig.isPopup;
 const painter = @import("paint.zig");
-const Alignment = @import("view/stack.zig").Alignment;
 const markTargets = @import("tree.zig").markTargets;
 const types = @import("types.zig");
+const Alignment = types.Alignment;
 const Constraint = types.Constraint;
 const Extent = types.Extent;
 const Point = types.Point;
@@ -211,7 +210,7 @@ pub fn anchorOf(node: anytype, path: []const node_zig.NodeId, anchor: *node_zig.
 
 /// Collects the deepest node at `at` in what the open popups show, and its
 /// ancestors. Sets `open` when a popup is open, whether `at` is in it or not.
-pub fn hit(node: anytype, at: Point, path: *Path, open: *bool) bool {
+pub fn hit(node: anytype, at: Point, path: anytype, open: *bool) bool {
     if (comptime !pops(@TypeOf(node.*))) return false;
     const found = shown: {
         if (comptime isPopup(@TypeOf(node.widget))) {
