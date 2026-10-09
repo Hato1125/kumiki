@@ -22,17 +22,17 @@ pub fn build(b: *std.Build) void {
     translate_c.addIncludePath(thorvg.getEmittedIncludeTree());
     translate_c.addIncludePath(sdl.getEmittedIncludeTree());
 
-    const katagi = b.addModule("katagi", .{
-        .root_source_file = b.path("src/katagi.zig"),
+    const kumiki = b.addModule("kumiki", .{
+        .root_source_file = b.path("src/kumiki.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
 
-    katagi.addImport("c", translate_c.createModule());
-    katagi.linkLibrary(thorvg);
-    katagi.linkLibrary(sdl);
+    kumiki.addImport("c", translate_c.createModule());
+    kumiki.linkLibrary(thorvg);
+    kumiki.linkLibrary(sdl);
 
-    const check = b.addTest(.{ .root_module = katagi });
+    const check = b.addTest(.{ .root_module = kumiki });
     b.default_step.dependOn(&check.step);
 }
