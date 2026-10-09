@@ -7,7 +7,7 @@ const Bounds = types.Bounds;
 const Color = types.Color;
 const Extent = types.Extent;
 
-// ThorVG takes font sizes in points, while katagi uses pixels.
+// ThorVG takes font sizes in points, while kumiki uses pixels.
 const points_per_pixel = 0.75;
 
 // From 0 to 100.
