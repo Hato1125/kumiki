@@ -35,14 +35,19 @@ pub const Painter = struct {
 pub fn paint(node: anytype, canvas: *Canvas) void {
     const Widget = @TypeOf(node.widget);
     const at = node_zig.offsetOf(node);
-    const p: Painter = .{ .canvas = canvas, .bounds = .{
-        .x = at.x,
-        .y = at.y,
-        .w = node.size.width,
-        .h = node.size.height,
-    } };
+    const p: Painter = .{
+        .canvas = canvas,
+        .bounds = .{
+            .x = at.x,
+            .y = at.y,
+            .w = node.size.width,
+            .h = node.size.height,
+        },
+    };
+
     if (comptime has(Widget, "paint")) node.widget.paint(p);
     if (comptime has(Widget, "beginPaint")) node.widget.beginPaint(p);
+
     if (comptime node_zig.isPopup(Widget)) {
         paint(&node.children[0], canvas);
     } else {
