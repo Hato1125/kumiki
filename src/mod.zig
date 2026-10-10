@@ -488,6 +488,14 @@ fn Animated(comptime Child: type) type {
     return struct {
         spec: anim.Animation,
         tween: anim.Tween(Resolved(Child)) = undefined,
+        /// What the view was measured with last, to measure it alone when
+        /// the animation moves it on.
+        constraint: Constraint = .{},
+
+        pub fn measure(self: *@This(), child: anytype, c: Constraint) Extent {
+            self.constraint = c;
+            return pass.measure(child, c);
+        }
     };
 }
 
