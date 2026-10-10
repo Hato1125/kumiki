@@ -5,6 +5,7 @@
 const std = @import("std");
 
 const anim = @import("anime.zig");
+const Corners = @import("canvas.zig").Corners;
 const types = @import("types.zig");
 const Alignment = types.Alignment;
 const Color = types.Color;
@@ -191,34 +192,29 @@ pub fn with(
     return .{ .children = .{base(self)}, .config = config };
 }
 
-const Insets = struct {
+pub const Insets = struct {
     top: f32 = 0,
     right: f32 = 0,
     bottom: f32 = 0,
     left: f32 = 0,
 
-    pub fn from(spec: anytype) Insets {
-        const Spec = @TypeOf(spec);
-        if (Spec == Insets) return spec;
-        if (@typeInfo(Spec) != .@"struct") {
-            return .{
-                .top = std.math.lossyCast(f32, spec),
-                .right = std.math.lossyCast(f32, spec),
-                .bottom = std.math.lossyCast(f32, spec),
-                .left = std.math.lossyCast(f32, spec),
-            };
-        }
-        var insets: Insets = .{};
-        if (@hasField(Spec, "x")) insets.left = std.math.lossyCast(f32, spec.x);
-        if (@hasField(Spec, "x")) insets.right = std.math.lossyCast(f32, spec.x);
-        if (@hasField(Spec, "y")) insets.top = std.math.lossyCast(f32, spec.y);
-        if (@hasField(Spec, "y")) insets.bottom = std.math.lossyCast(f32, spec.y);
-        inline for (@typeInfo(Insets).@"struct".fields) |edge| {
-            if (@hasField(Spec, edge.name)) {
-                @field(insets, edge.name) = std.math.lossyCast(f32, @field(spec, edge.name));
-            }
-        }
-        return insets;
+    pub fn all(inset: f32) Insets {
+        return .{
+            .top = inset,
+            .right = inset,
+            .bottom = inset,
+            .left = inset,
+        };
+    }
+
+    /// `x` is for the left and the right edge, `y` for the top and the bottom.
+    pub fn xy(x: f32, y: f32) Insets {
+        return .{
+            .top = y,
+            .right = x,
+            .bottom = y,
+            .left = x,
+        };
     }
 
     pub fn measure(insets: Insets, child: anytype, c: Constraint) Extent {
@@ -239,10 +235,8 @@ const Insets = struct {
     }
 };
 
-/// `spec` is a number for all edges, or a struct with any of `x`, `y`, `top`,
-/// `right`, `bottom` and `left`.
-pub fn padding(self: anytype, spec: anytype) Wrapped(@TypeOf(self), Insets) {
-    return with(self, Insets.from(spec));
+pub fn padding(self: anytype, insets: Insets) Wrapped(@TypeOf(self), Insets) {
+    return with(self, insets);
 }
 
 // Gives the child a fixed size, or one that grows up to `max_width` and
@@ -257,6 +251,10 @@ const Frame = struct {
     max_width: ?f32 = null,
     max_height: ?f32 = null,
     alignment: Alignment = .center,
+
+    pub fn square(side: f32) Frame {
+        return .{ .width = side, .height = side };
+    }
 
     fn outer(fixed: ?f32, max: ?f32, high: f32, child: f32) f32 {
         if (fixed) |size| return size;
@@ -303,7 +301,7 @@ const Fill = struct {
     color: Color,
 
     pub fn beginPaint(fill: Fill, p: Painter) void {
-        p.fill(0, fill.color);
+        p.fill(.{}, fill.color);
     }
 };
 
@@ -323,19 +321,19 @@ pub fn bg(self: anytype, back: anytype) Backed(@TypeOf(self), @TypeOf(back)) {
 }
 
 const Clip = struct {
-    radius: f32,
+    corners: Corners,
 
     pub fn beginPaint(_: Clip, p: Painter) void {
         p.canvas.pushLayer();
     }
 
     pub fn endPaint(clipped: Clip, p: Painter) void {
-        p.canvas.popLayer(p.bounds, clipped.radius, 255);
+        p.canvas.popLayer(p.bounds, clipped.corners, 255);
     }
 };
 
-pub fn clip(self: anytype, radius: f32) Wrapped(@TypeOf(self), Clip) {
-    return with(self, Clip{ .radius = radius });
+pub fn clip(self: anytype, corners: Corners) Wrapped(@TypeOf(self), Clip) {
+    return with(self, Clip{ .corners = corners });
 }
 
 const Opacity = struct {
@@ -346,7 +344,7 @@ const Opacity = struct {
     }
 
     pub fn endPaint(o: Opacity, p: Painter) void {
-        p.canvas.popLayer(null, 0, @intFromFloat(@round(std.math.clamp(o.value, 0, 1) * 255)));
+        p.canvas.popLayer(null, .{}, @intFromFloat(@round(std.math.clamp(o.value, 0, 1) * 255)));
     }
 };
 

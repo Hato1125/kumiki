@@ -55,7 +55,7 @@ pub const Picture = struct {
         const covers = picture.fitting == .cover;
         if (covers) p.canvas.pushLayer();
         p.canvas.image(source, area);
-        if (covers) p.canvas.popLayer(p.bounds, 0, 255);
+        if (covers) p.canvas.popLayer(p.bounds, .{}, 255);
     }
 };
 
