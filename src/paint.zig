@@ -1,4 +1,6 @@
-const Canvas = @import("canvas.zig").Canvas;
+const canvas_zig = @import("canvas.zig");
+const Canvas = canvas_zig.Canvas;
+const Corners = canvas_zig.Corners;
 const types = @import("types.zig");
 const node_zig = @import("node.zig");
 const has = node_zig.has;
@@ -7,12 +9,12 @@ pub const Painter = struct {
     canvas: *Canvas,
     bounds: types.Bounds,
 
-    pub fn fill(p: Painter, radius: f32, color: types.Color) void {
-        p.canvas.fillRect(p.bounds, radius, color);
+    pub fn fill(p: Painter, corners: Corners, color: types.Color) void {
+        p.canvas.fillRect(p.bounds, corners, color);
     }
 
-    pub fn stroke(p: Painter, radius: f32, width: f32, color: types.Color) void {
-        p.canvas.strokeRect(p.bounds, radius, width, color);
+    pub fn stroke(p: Painter, corners: Corners, width: f32, color: types.Color) void {
+        p.canvas.strokeRect(p.bounds, corners, width, color);
     }
 
     /// The time of this frame in seconds, on the clock of Context.now.

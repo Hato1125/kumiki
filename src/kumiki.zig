@@ -50,6 +50,7 @@ pub const Painter = @import("paint.zig").Painter;
 pub const Canvas = canvas.Canvas;
 pub const Path = canvas.Path;
 pub const Corners = canvas.Corners;
+pub const Insets = mod.Insets;
 
 pub const Text = mod.Container(void, @import("view/text.zig").Text);
 pub const Rect = mod.Container(void, @import("view/rect.zig").Rect);

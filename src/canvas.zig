@@ -510,6 +510,22 @@ pub const Corners = struct {
             .bottom_left = radius,
         };
     }
+
+    fn isUniform(corners: Corners) bool {
+        return corners.top_left == corners.top_right and
+            corners.top_right == corners.bottom_right and
+            corners.bottom_right == corners.bottom_left;
+    }
+
+    /// The corners of an outline that runs `by` inside this one.
+    fn inset(corners: Corners, by: f32) Corners {
+        return .{
+            .top_left = @max(0, corners.top_left - by),
+            .top_right = @max(0, corners.top_right - by),
+            .bottom_right = @max(0, corners.bottom_right - by),
+            .bottom_left = @max(0, corners.bottom_left - by),
+        };
+    }
 };
 
 /// The stroke is centered on the outline.
@@ -654,11 +670,11 @@ pub const Canvas = struct {
     pub fn fillRect(
         canvas: *Canvas,
         r: Bounds,
-        radius: f32,
+        corners: Corners,
         color: Color,
     ) void {
         if (color.a == 0) return;
-        const shape = canvas.roundedRect(r, radius);
+        const shape = canvas.roundedRect(r, corners);
         _ = c.tvg_shape_set_fill_color(shape, color.r, color.g, color.b, color.a);
         canvas.add(shape);
     }
@@ -667,7 +683,7 @@ pub const Canvas = struct {
     pub fn strokeRect(
         canvas: *Canvas,
         r: Bounds,
-        radius: f32,
+        corners: Corners,
         width: f32,
         color: Color,
     ) void {
@@ -679,7 +695,7 @@ pub const Canvas = struct {
             .w = r.w - width,
             .h = r.h - width,
         };
-        const shape = canvas.roundedRect(inner, @max(0, radius - half));
+        const shape = canvas.roundedRect(inner, corners.inset(half));
         _ = c.tvg_shape_set_stroke_width(shape, width * canvas.scale);
         _ = c.tvg_shape_set_stroke_color(shape, color.r, color.g, color.b, color.a);
         canvas.add(shape);
@@ -838,13 +854,13 @@ pub const Canvas = struct {
     pub fn popLayer(
         canvas: *Canvas,
         clip: ?Bounds,
-        radius: f32,
+        corners: Corners,
         opacity: u8,
     ) void {
         canvas.depth -= 1;
         const layer = canvas.layers[canvas.depth];
         if (clip) |r| {
-            _ = c.tvg_paint_set_clip(layer, canvas.roundedRect(r, radius));
+            _ = c.tvg_paint_set_clip(layer, canvas.roundedRect(r, corners));
         }
         if (opacity < 255) _ = c.tvg_paint_set_opacity(layer, opacity);
         canvas.add(layer);
@@ -883,11 +899,15 @@ pub const Canvas = struct {
         canvas.add(layer);
     }
 
-    fn roundedRect(canvas: *Canvas, r: Bounds, radius: f32) c.Tvg_Paint {
-        const shape = canvas.path().shape;
-        const corner = @min(radius, @min(r.w, r.h) / 2);
-        _ = c.tvg_shape_append_rect(shape, r.x, r.y, @max(0, r.w), @max(0, r.h), corner, corner, true);
-        return shape;
+    fn roundedRect(canvas: *Canvas, r: Bounds, corners: Corners) c.Tvg_Paint {
+        const outline = canvas.path();
+        if (!corners.isUniform()) {
+            outline.rect(r, corners);
+            return outline.shape;
+        }
+        const corner = @min(corners.top_left, @min(r.w, r.h) / 2);
+        _ = c.tvg_shape_append_rect(outline.shape, r.x, r.y, @max(0, r.w), @max(0, r.h), corner, corner, true);
+        return outline.shape;
     }
 
     fn add(canvas: *Canvas, paint: c.Tvg_Paint) void {

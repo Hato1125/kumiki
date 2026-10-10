@@ -1,3 +1,4 @@
+const Corners = @import("../canvas.zig").Corners;
 const types = @import("../types.zig");
 const Color = types.Color;
 const Constraint = types.Constraint;
@@ -11,7 +12,7 @@ pub const Rect = struct {
     fill_color: Color = .black,
     stroke_color: Color = .transparent,
     stroke_width: f32 = 0,
-    corner: f32 = 0,
+    corner: Corners = .{},
 
     pub fn measure(_: Rect, c: Constraint) Extent {
         return c.biggest();
