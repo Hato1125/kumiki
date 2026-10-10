@@ -696,7 +696,7 @@ pub const Canvas = struct {
             .h = r.h - width,
         };
         const shape = canvas.roundedRect(inner, corners.inset(half));
-        _ = c.tvg_shape_set_stroke_width(shape, width * canvas.scale);
+        _ = c.tvg_shape_set_stroke_width(shape, width);
         _ = c.tvg_shape_set_stroke_color(shape, color.r, color.g, color.b, color.a);
         canvas.add(shape);
     }
