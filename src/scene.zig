@@ -13,6 +13,7 @@ const painter = @import("paint.zig");
 const paint = painter.paint;
 const popup = @import("popup.zig");
 const Tasks = @import("task.zig").Tasks;
+const text_zig = @import("text.zig");
 const tree = @import("tree.zig");
 
 /// A tree of views with its focus and pointer. `Impl` hands over the events
@@ -26,6 +27,11 @@ const tree = @import("tree.zig");
 /// area is null, which also ends what an input method is composing;
 /// `copy(text)` puts text into the clipboard and returns whether it took it,
 /// and `paste(allocator)` returns a copy of what it holds, or null.
+///
+/// An implementation may declare `scale()`, how many pixels make up one unit
+/// of the sizes. It is read on every frame too: a text is as wide as the
+/// scale it is drawn at makes it, so the scene tells the scale before it
+/// measures, and lays everything out again when the scale changes.
 ///
 /// The root may declare `pub fn closing`, which returns whether the scene
 /// closes when the implementation reports a close, and without which it
@@ -51,6 +57,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         state: node_zig.State,
         root: node_zig.Node(Root),
         size: Extent = .{},
+        scale: f32 = 1,
         pointer: ?Point = null,
         pending: bool = true,
         /// Where the focus, the pointer and the pressed tap are. The state
@@ -243,6 +250,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         fn update(s: *Self) void {
             const state = &s.state;
             const size = s.impl.size();
+            const scale: f32 = if (comptime @hasDecl(Impl, "scale")) s.impl.scale() else s.scale;
+            // Before anything is built: an animation measures its view on
+            // its own.
+            if (comptime @hasDecl(Impl, "scale")) text_zig.setScale(scale);
             s.pending = false;
             state.animating = false;
             state.built = false;
@@ -269,9 +280,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 s.wanted = 0;
                 if (walk.first != 0) s.move(&s.focus, s.pathTo(walk.first));
             }
-            if (state.built or !std.meta.eql(size, s.size)) {
+            if (state.built or !std.meta.eql(size, s.size) or scale != s.scale) {
                 s.changed = true;
                 s.size = size;
+                s.scale = scale;
                 _ = pass.measure(&s.root, .tight(size));
                 pass.layout(&s.root, .{});
                 popup.place(&s.root, size);

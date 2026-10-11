@@ -17,6 +17,9 @@ pub const Window = struct {
     gl: c.SDL_GLContext,
     // On the heap, because the images remember which canvas holds them.
     canvas: *gfx.Canvas,
+    // The scale the scene measured the frame at, which the frame is drawn
+    // at too, even if the window has moved to another display since.
+    density: f32 = 1,
 
     /// `font` is the TTF or OTF file of the text that names no font, and
     /// `fonts` are more files for the text that asks for them by name.
@@ -157,6 +160,11 @@ pub const Window = struct {
         };
     }
 
+    pub fn scale(w: *Window) f32 {
+        w.density = c.SDL_GetWindowPixelDensity(w.window);
+        return w.density;
+    }
+
     pub fn now(_: *Window) f64 {
         return @as(f64, @floatFromInt(c.SDL_GetTicksNS())) / std.time.ns_per_s;
     }
@@ -166,12 +174,10 @@ pub const Window = struct {
         _ = c.SDL_GL_MakeCurrent(w.window, w.gl);
         const pixels = pixelSize(w.window);
         if (pixels[0] == 0 or pixels[1] == 0) return null;
-        const scale = c.SDL_GetWindowPixelDensity(w.window);
-        text_zig.setScale(scale);
         w.canvas.begin(.{
             .width = pixels[0],
             .height = pixels[1],
-            .scale = scale,
+            .scale = w.density,
             .background = .transparent,
         });
         return w.canvas;
