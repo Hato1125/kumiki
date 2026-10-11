@@ -1,4 +1,4 @@
-const Corners = @import("../canvas.zig").Corners;
+const Corners = @import("gfx").Corners;
 const types = @import("../types.zig");
 const Color = types.Color;
 const Constraint = types.Constraint;

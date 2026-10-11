@@ -9,7 +9,8 @@ const keys = input.keys;
 const pass = @import("layout.zig");
 const node_zig = @import("node.zig");
 const NodeId = node_zig.NodeId;
-const paint = @import("paint.zig").paint;
+const painter = @import("paint.zig");
+const paint = painter.paint;
 const popup = @import("popup.zig");
 const Tasks = @import("task.zig").Tasks;
 const tree = @import("tree.zig");
@@ -217,11 +218,14 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.again = std.math.inf(f64);
             if (try s.impl.begin()) |canvas| {
                 s.changed = false;
-                canvas.now = s.state.now;
-                canvas.again = s.again;
-                paint(&s.root, canvas);
-                popup.paint(&s.root, canvas);
-                s.again = canvas.again;
+                var target: painter.Target = .{
+                    .canvas = canvas,
+                    .now = s.state.now,
+                    .again = s.again,
+                };
+                paint(&s.root, &target);
+                popup.paint(&s.root, &target);
+                s.again = target.again;
                 try s.impl.end();
             }
             return true;

@@ -7,7 +7,7 @@ const std = @import("std");
 
 const anim = @import("anime.zig");
 const invoke = @import("call.zig").invoke;
-const Canvas = @import("canvas.zig").Canvas;
+const Target = @import("paint.zig").Target;
 const input = @import("input.zig");
 const pass = @import("layout.zig");
 const node_zig = @import("node.zig");
@@ -166,29 +166,35 @@ pub fn place(node: anytype, window: Extent) void {
 }
 
 /// Draws what the popups show, a popup inside another in front of it.
-pub fn paint(node: anytype, canvas: *Canvas) void {
+pub fn paint(node: anytype, target: *Target) void {
     if (comptime !pops(@TypeOf(node.*))) return;
     if (comptime isPopup(@TypeOf(node.widget))) {
-        paint(&node.children[0], canvas);
+        paint(&node.children[0], target);
         const popup = &node.widget;
         if (!popup.visible) return;
         const content = &node.children[1];
         const transition = popup.transition;
-        const opacity = popup.faded.at(transition.fade, canvas.now);
-        const grown = popup.grown.at(transition.grow, canvas.now);
+        const opacity = popup.faded.at(transition.fade, target.now);
+        const grown = popup.grown.at(transition.grow, target.now);
         const scale = transition.scale + (1 - transition.scale) * grown;
         const settled = opacity >= 1 and scale == 1;
-        if (!settled) canvas.pushLayer();
-        painter.paint(content, canvas);
-        paint(content, canvas);
-        if (settled) return;
-        const at = node_zig.offsetOf(content);
-        return canvas.popScaled(.{
-            .x = at.x + content.size.width * popup.origin.x,
-            .y = at.y + content.size.height * popup.origin.y,
-        }, scale, opacity);
+        if (!settled) {
+            const at = node_zig.offsetOf(content);
+            target.canvas.push(.{
+                .opacity = std.math.clamp(opacity, 0, 1),
+                .scale = scale,
+                .origin = .{
+                    .x = at.x + content.size.width * popup.origin.x,
+                    .y = at.y + content.size.height * popup.origin.y,
+                },
+            });
+        }
+        painter.paint(content, target);
+        paint(content, target);
+        if (!settled) target.canvas.pop();
+        return;
     }
-    _ = each(node, .shown, paint, .{canvas});
+    _ = each(node, .shown, paint, .{target});
 }
 
 /// The first focusable node of the view of the outermost popup on `path`

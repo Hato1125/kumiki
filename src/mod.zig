@@ -5,7 +5,7 @@
 const std = @import("std");
 
 const anim = @import("anime.zig");
-const Corners = @import("canvas.zig").Corners;
+const Corners = @import("gfx").Corners;
 const types = @import("types.zig");
 const Alignment = types.Alignment;
 const Color = types.Color;
@@ -323,12 +323,12 @@ pub fn bg(self: anytype, back: anytype) Backed(@TypeOf(self), @TypeOf(back)) {
 const Clip = struct {
     corners: Corners,
 
-    pub fn beginPaint(_: Clip, p: Painter) void {
-        p.canvas.pushLayer();
+    pub fn beginPaint(clipped: Clip, p: Painter) void {
+        p.canvas.push(.{ .clip = p.box(), .corners = clipped.corners });
     }
 
-    pub fn endPaint(clipped: Clip, p: Painter) void {
-        p.canvas.popLayer(p.bounds, clipped.corners, 255);
+    pub fn endPaint(_: Clip, p: Painter) void {
+        p.canvas.pop();
     }
 };
 
@@ -339,12 +339,12 @@ pub fn clip(self: anytype, corners: Corners) Wrapped(@TypeOf(self), Clip) {
 const Opacity = struct {
     value: f32,
 
-    pub fn beginPaint(_: Opacity, p: Painter) void {
-        p.canvas.pushLayer();
+    pub fn beginPaint(o: Opacity, p: Painter) void {
+        p.canvas.push(.{ .opacity = std.math.clamp(o.value, 0, 1) });
     }
 
-    pub fn endPaint(o: Opacity, p: Painter) void {
-        p.canvas.popLayer(null, .{}, @intFromFloat(@round(std.math.clamp(o.value, 0, 1) * 255)));
+    pub fn endPaint(_: Opacity, p: Painter) void {
+        p.canvas.pop();
     }
 };
 
