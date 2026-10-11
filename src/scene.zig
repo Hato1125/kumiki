@@ -9,7 +9,8 @@ const keys = input.keys;
 const pass = @import("layout.zig");
 const node_zig = @import("node.zig");
 const NodeId = node_zig.NodeId;
-const paint = @import("paint.zig").paint;
+const painter = @import("paint.zig");
+const paint = painter.paint;
 const popup = @import("popup.zig");
 const Tasks = @import("task.zig").Tasks;
 const tree = @import("tree.zig");
@@ -187,20 +188,10 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     },
                     .pointer_leave => s.hoverAt(null),
                     .button => |button| s.pressButton(button),
-                    .wheel => |wheel| {
-                        s.hoverAt(wheel.at);
-                        const target = s.hover.id();
-                        if (target != 0) _ = s.offer(target, .{ .wheel = wheel });
-                    },
-                    .drop => |drop| {
-                        s.hoverAt(.{ .x = drop.x, .y = drop.y });
-                        const target = s.hover.id();
-                        if (target != 0) _ = s.offer(target, .{ .drop = drop });
-                    },
+                    .wheel => |wheel| s.offerAt(wheel.at, .{ .wheel = wheel }),
+                    .drop => |drop| s.offerAt(.{ .x = drop.x, .y = drop.y }, .{ .drop = drop }),
                     .key => |press| s.pressKey(press),
-                    .text => |text| if (s.focus.id() != 0) {
-                        _ = s.offer(s.focus.id(), .{ .text = text });
-                    },
+                    .text => |text| _ = s.offer(s.focus.id(), .{ .text = text }),
                     .active => |active| s.activate(active),
                     .redraw => redraw = true,
                     .close => if (s.mayClose()) return false,
@@ -217,11 +208,14 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.again = std.math.inf(f64);
             if (try s.impl.begin()) |canvas| {
                 s.changed = false;
-                canvas.now = s.state.now;
-                canvas.again = s.again;
-                paint(&s.root, canvas);
-                popup.paint(&s.root, canvas);
-                s.again = canvas.again;
+                var target: painter.Target = .{
+                    .canvas = canvas,
+                    .now = s.state.now,
+                    .again = s.again,
+                };
+                paint(&s.root, &target);
+                popup.paint(&s.root, &target);
+                s.again = target.again;
                 try s.impl.end();
             }
             return true;
@@ -446,7 +440,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                         s.move(&s.focus, s.hover.from(found.focusable));
                     }
                 }
-                s.held = if (s.hover.id() == 0) 0 else s.offer(s.hover.id(), .{ .pointer = .{
+                s.held = s.offer(s.hover.id(), .{ .pointer = .{
                     .phase = .down,
                     .button = button.button,
                     .x = button.x,
@@ -483,9 +477,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         // dismisses the popups instead.
         fn pressKey(s: *Self, press: input.KeyPress) void {
             if (press.down and !press.isModifier()) s.setKeyboard(true);
-            if (s.focus.id() != 0 and s.offer(s.focus.id(), .{ .key = press }) != 0) {
-                return;
-            }
+            if (s.offer(s.focus.id(), .{ .key = press }) != 0) return;
             if (!press.down) return;
             if (s.shortcut(press)) return;
 
@@ -515,8 +507,16 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             return by != 0;
         }
 
-        // Returns the node that handled it, or 0.
+        // Moves the pointer to `at` and offers `what` to the view there.
+        fn offerAt(s: *Self, at: Point, what: input.Offer) void {
+            s.hoverAt(at);
+            _ = s.offer(s.hover.id(), what);
+        }
+
+        // Returns the node that handled it, or 0, which also stands for no
+        // node to offer it to.
         fn offer(s: *Self, target: NodeId, what: input.Offer) NodeId {
+            if (target == 0) return 0;
             var by: NodeId = 0;
             _ = input.bubble(&s.root, target, what, .{}, &s.state, &by);
             if (by != 0) s.pending = true;

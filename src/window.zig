@@ -1,18 +1,22 @@
 const std = @import("std");
 const c = @import("c");
 
-const canvas_zig = @import("canvas.zig");
-const Canvas = canvas_zig.Canvas;
+const gfx = @import("gfx");
+
+const image_zig = @import("image.zig");
+const text_zig = @import("text.zig");
 const types = @import("types.zig");
 const Extent = types.Extent;
 const Event = @import("input.zig").Event;
 const Scene = @import("scene.zig").Scene;
 
-/// The implementation of a Scene in a resizable SDL3 window with OpenGL 3.3.
+/// The implementation of a Scene in a resizable SDL3 window with OpenGL ES
+/// 3.0.
 pub const Window = struct {
     window: *c.SDL_Window,
     gl: c.SDL_GLContext,
-    canvas: Canvas,
+    // On the heap, because the images remember which canvas holds them.
+    canvas: *gfx.Canvas,
 
     /// `font` is the TTF or OTF file of the text that names no font, and
     /// `fonts` are more files for the text that asks for them by name.
@@ -26,18 +30,18 @@ pub const Window = struct {
         fonts: []const [:0]const u8 = &.{},
     };
 
-    pub fn init(_: std.mem.Allocator, options: Options) !Window {
+    pub fn init(allocator: std.mem.Allocator, options: Options) !Window {
         if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS)) {
             return error.SdlInit;
         }
         errdefer c.SDL_Quit();
-        try canvas_zig.startup(options.font);
-        errdefer canvas_zig.shutdown();
-        for (options.fonts) |path| try canvas_zig.addFont(path);
+        try text_zig.startup(options.font);
+        errdefer text_zig.shutdown();
+        for (options.fonts) |path| try text_zig.addFont(path);
 
         _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MINOR_VERSION, 3);
-        _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_CORE);
+        _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_ES);
         const window = c.SDL_CreateWindow(
             options.title,
             @intCast(options.width),
@@ -62,19 +66,28 @@ pub const Window = struct {
         _ = c.SDL_GL_MakeCurrent(window, gl);
         _ = c.SDL_GL_SetSwapInterval(1);
 
-        const pixels = pixelSize(window);
+        const canvas = try allocator.create(gfx.Canvas);
+        errdefer allocator.destroy(canvas);
+        canvas.* = try .init(allocator, .{
+            .loader = c.SDL_GL_GetProcAddress,
+            .texts = try text_zig.system(),
+        });
         return .{
             .window = window,
             .gl = gl,
-            .canvas = try .init(gl, pixels[0], pixels[1]),
+            .canvas = canvas,
         };
     }
 
     pub fn deinit(w: *Window) void {
+        const allocator = w.canvas.allocator;
+        image_zig.release();
         w.canvas.deinit();
+        allocator.destroy(w.canvas);
         _ = c.SDL_GL_DestroyContext(w.gl);
         c.SDL_DestroyWindow(w.window);
-        canvas_zig.shutdown();
+        image_zig.shutdown();
+        text_zig.shutdown();
         c.SDL_Quit();
     }
 
@@ -149,18 +162,23 @@ pub const Window = struct {
     }
 
     /// A minimized window has nothing to draw to.
-    pub fn begin(w: *Window) !?*Canvas {
+    pub fn begin(w: *Window) !?*gfx.Canvas {
         _ = c.SDL_GL_MakeCurrent(w.window, w.gl);
         const pixels = pixelSize(w.window);
         if (pixels[0] == 0 or pixels[1] == 0) return null;
-        try w.canvas.resize(pixels[0], pixels[1]);
-        w.canvas.scale = c.SDL_GetWindowPixelDensity(w.window);
-        try w.canvas.begin();
-        return &w.canvas;
+        const scale = c.SDL_GetWindowPixelDensity(w.window);
+        text_zig.setScale(scale);
+        w.canvas.begin(.{
+            .width = pixels[0],
+            .height = pixels[1],
+            .scale = scale,
+            .background = .transparent,
+        });
+        return w.canvas;
     }
 
     pub fn end(w: *Window) !void {
-        try w.canvas.end();
+        w.canvas.end();
         _ = c.SDL_GL_SwapWindow(w.window);
     }
 

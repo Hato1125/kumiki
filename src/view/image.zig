@@ -1,6 +1,8 @@
 const std = @import("std");
 
-const canvas = @import("../canvas.zig");
+const gfx = @import("gfx");
+
+const Image = @import("../image.zig").Image;
 const types = @import("../types.zig");
 const Constraint = types.Constraint;
 const Extent = types.Extent;
@@ -9,13 +11,13 @@ const Painter = @import("../paint.zig").Painter;
 
 /// How an image goes into a box of another shape: stretched over it, as
 /// large as fits inside, or as small as covers it with the rest cut off.
-pub const Fit = enum { fill, contain, cover };
+pub const Fit = gfx.Fit;
 
 /// The config of an image at its own size, or smaller with the same shape
 /// where space is short. With a fit it takes the space offered instead, like
 /// a rect. Its settings are methods of the container.
 pub const Picture = struct {
-    source: ?canvas.Image,
+    source: ?Image,
     fitting: ?Fit = null,
 
     pub fn measure(picture: Picture, c: Constraint) Extent {
@@ -34,32 +36,19 @@ pub const Picture = struct {
 
     pub fn paint(picture: Picture, p: Painter) void {
         const source = picture.source orelse return;
-        const natural = source.size();
-        if (natural.width <= 0 or natural.height <= 0) return;
-        const across = p.bounds.w / natural.width;
-        const down = p.bounds.h / natural.height;
-        const scale: [2]f32 = switch (picture.fitting orelse .contain) {
-            .fill => .{ across, down },
-            .contain => @splat(@min(across, down)),
-            .cover => @splat(@max(across, down)),
-        };
-        const w = natural.width * scale[0];
-        const h = natural.height * scale[1];
-        const area: types.Bounds = .{
-            .x = p.bounds.x + (p.bounds.w - w) / 2,
-            .y = p.bounds.y + (p.bounds.h - h) / 2,
-            .w = w,
-            .h = h,
-        };
-
-        const covers = picture.fitting == .cover;
-        if (covers) p.canvas.pushLayer();
-        p.canvas.image(source, area);
-        if (covers) p.canvas.popLayer(p.bounds, 0, 255);
+        const uploaded = source.on(p.canvas) orelse return;
+        p.canvas.image(.{
+            .image = uploaded,
+            .x = p.bounds.x,
+            .y = p.bounds.y,
+            .width = p.bounds.w,
+            .height = p.bounds.h,
+            .fit = picture.fitting orelse .contain,
+        });
     }
 };
 
 /// Shows `source`, or nothing while it is null.
-pub fn image(source: ?canvas.Image) mod.Container(void, Picture) {
+pub fn image(source: ?Image) mod.Container(void, Picture) {
     return mod.leaf(Picture{ .source = source });
 }

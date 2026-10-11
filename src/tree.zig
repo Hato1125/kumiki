@@ -4,6 +4,7 @@ const call = @import("call.zig");
 const invoke = call.invoke;
 const leaf = @import("mod.zig").leaf;
 const node_zig = @import("node.zig");
+const pass = @import("layout.zig");
 const Provided = node_zig.Provided;
 const Resolved = node_zig.Resolved;
 const State = node_zig.State;
@@ -186,10 +187,11 @@ pub fn rebuild(node: anytype, state: *State, owners: anytype) void {
         const inner = owners ++ .{node};
         if (node.dirty) {
             @branchHint(.unlikely);
-            node.dirty = false;
-            state.built = true;
             const last = node.arena.promote(state.gpa);
             node.arena = .init;
+            node.dirty = false;
+            state.built = true;
+
             // A new value reaches the components inside only when they are
             // built again too.
             if (comptime provides(Widget)) {
@@ -209,10 +211,25 @@ pub fn rebuild(node: anytype, state: *State, owners: anytype) void {
     if (comptime @hasField(Widget, "tween")) {
         const tween = &node.widget.tween;
         if (tween.running) {
-            state.built = true;
-            apply(&node.children[0], tween.at(node.widget.spec, state.now), state, owners, .function);
+            apply(
+                &node.children[0],
+                tween.at(node.widget.spec, state.now),
+                state,
+                owners,
+                .function,
+            );
+
             tween.finish(node.widget.spec, state.now);
             if (tween.running) state.animating = true;
+            // An animation that leaves the size of the view as it was, such
+            // as one of a color, moves nothing around it, so only the view
+            // is laid out again.
+            const size = node.size;
+            if (std.meta.eql(pass.measure(node, node.widget.constraint), size)) {
+                pass.layout(node, node_zig.offsetOf(node));
+            } else {
+                state.built = true;
+            }
         }
     }
     _ = each(node, .all, rebuild, .{ state, owners });
