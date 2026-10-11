@@ -32,10 +32,16 @@ pub fn build(b: *std.Build) void {
     kumiki.addImport("gfx", gfx);
     kumiki.linkLibrary(sdl);
     // gfx draws with OpenGL ES and leaves the linking to whoever makes the
-    // context. The other two read the image files.
+    // context.
     kumiki.linkSystemLibrary("GLESv2", .{});
-    kumiki.linkSystemLibrary("libpng", .{});
-    kumiki.linkSystemLibrary("libturbojpeg", .{});
+
+    // Wuffs reads the image files. It is optimized whatever the rest is
+    // built as: unoptimized, it takes several times as long to decode.
+    kumiki.addIncludePath(b.dependency("wuffs", .{}).path("release/c"));
+    kumiki.addCSourceFile(.{
+        .file = b.path("src/image.c"),
+        .flags = &.{ "-O2", "-fno-sanitize=undefined" },
+    });
 
     const check = b.addTest(.{ .root_module = kumiki });
     b.default_step.dependOn(&check.step);
