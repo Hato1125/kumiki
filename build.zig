@@ -31,9 +31,6 @@ pub fn build(b: *std.Build) void {
     kumiki.addImport("c", translate_c.createModule());
     kumiki.addImport("gfx", gfx);
     kumiki.linkLibrary(sdl);
-    // gfx draws with OpenGL ES and leaves the linking to whoever makes the
-    // context.
-    kumiki.linkSystemLibrary("GLESv2", .{});
 
     // Wuffs reads the image files. It is optimized whatever the rest is
     // built as: unoptimized, it takes several times as long to decode.

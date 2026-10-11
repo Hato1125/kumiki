@@ -68,7 +68,10 @@ pub const Window = struct {
 
         const canvas = try allocator.create(gfx.Canvas);
         errdefer allocator.destroy(canvas);
-        canvas.* = try .init(allocator, .{ .texts = try text_zig.system() });
+        canvas.* = try .init(allocator, .{
+            .loader = c.SDL_GL_GetProcAddress,
+            .texts = try text_zig.system(),
+        });
         return .{
             .window = window,
             .gl = gl,
