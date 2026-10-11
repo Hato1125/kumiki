@@ -199,12 +199,7 @@ pub const Insets = struct {
     left: f32 = 0,
 
     pub fn all(inset: f32) Insets {
-        return .{
-            .top = inset,
-            .right = inset,
-            .bottom = inset,
-            .left = inset,
-        };
+        return xy(inset, inset);
     }
 
     /// `x` is for the left and the right edge, `y` for the top and the bottom.
