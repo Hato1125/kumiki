@@ -1,3 +1,4 @@
 #include <SDL3/SDL.h>
 
-#include <thorvg_capi.h>
+#include <png.h>
+#include <turbojpeg.h>

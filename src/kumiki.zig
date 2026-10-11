@@ -1,5 +1,7 @@
 const anim = @import("anime.zig");
-const canvas = @import("canvas.zig");
+const gfx = @import("gfx");
+const image_zig = @import("image.zig");
+const text_zig = @import("text.zig");
 const types = @import("types.zig");
 const input = @import("input.zig");
 const mod = @import("mod.zig");
@@ -25,9 +27,20 @@ pub const KeyPress = input.KeyPress;
 pub const Chord = input.Chord;
 pub const TextInput = input.TextInput;
 pub const keys = input.keys;
-pub const startup = canvas.startup;
-pub const shutdown = canvas.shutdown;
-pub const addFont = canvas.addFont;
+pub const startup = text_zig.startup;
+pub const addFont = text_zig.addFont;
+// For an implementation: what its canvas shares to draw the text, the scale
+// to tell before every frame, and what to call before its canvas goes away.
+pub const textSystem = text_zig.system;
+pub const setTextScale = text_zig.setScale;
+pub const releaseImages = image_zig.release;
+
+/// Lets go of the fonts and the images. The canvas that drew them has to
+/// be gone by then.
+pub fn shutdown() void {
+    image_zig.shutdown();
+    text_zig.shutdown();
+}
 
 pub const Color = types.Color;
 pub const Point = types.Point;
@@ -47,15 +60,15 @@ pub const measure = pass.measure;
 pub const layout = pass.layout;
 pub const offsetOf = @import("node.zig").offsetOf;
 pub const Painter = @import("paint.zig").Painter;
-pub const Canvas = canvas.Canvas;
-pub const Path = canvas.Path;
-pub const Corners = canvas.Corners;
+pub const Canvas = gfx.Canvas;
+pub const Layer = gfx.Layer;
+pub const Corners = gfx.Corners;
 pub const Insets = mod.Insets;
 
 pub const Text = mod.Container(void, @import("view/text.zig").Text);
 pub const Rect = mod.Container(void, @import("view/rect.zig").Rect);
 pub const Picture = mod.Container(void, @import("view/image.zig").Picture);
-pub const Image = canvas.Image;
+pub const Image = image_zig.Image;
 
 pub const show = @import("view/show.zig").show;
 pub const wrap = mod.wrap;

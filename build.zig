@@ -4,10 +4,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const thorvg = b.dependency("thorvg", .{
+    const gfx = b.dependency("gfx", .{
         .target = target,
         .optimize = optimize,
-    }).artifact("thorvg");
+    }).module("gfx");
 
     const sdl = b.dependency("sdl", .{
         .target = target,
@@ -19,7 +19,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    translate_c.addIncludePath(thorvg.getEmittedIncludeTree());
     translate_c.addIncludePath(sdl.getEmittedIncludeTree());
 
     const kumiki = b.addModule("kumiki", .{
@@ -30,8 +29,13 @@ pub fn build(b: *std.Build) void {
     });
 
     kumiki.addImport("c", translate_c.createModule());
-    kumiki.linkLibrary(thorvg);
+    kumiki.addImport("gfx", gfx);
     kumiki.linkLibrary(sdl);
+    // gfx draws with OpenGL ES and leaves the linking to whoever makes the
+    // context. The other two read the image files.
+    kumiki.linkSystemLibrary("GLESv2", .{});
+    kumiki.linkSystemLibrary("libpng", .{});
+    kumiki.linkSystemLibrary("libturbojpeg", .{});
 
     const check = b.addTest(.{ .root_module = kumiki });
     b.default_step.dependOn(&check.step);
