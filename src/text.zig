@@ -16,8 +16,8 @@ var texts: ?gfx.TextSystem = null;
 // How many pixels make up one unit of the sizes.
 var scale: f32 = 1;
 
-/// An implementation calls this before every frame with the scale it draws
-/// at, so that what is measured is what is drawn.
+/// The scene calls this before it measures with the scale that its
+/// implementation draws at, so that what is measured is what is drawn.
 pub fn setScale(pixels_per_unit: f32) void {
     scale = pixels_per_unit;
 }
