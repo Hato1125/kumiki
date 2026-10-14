@@ -12,6 +12,7 @@ const Color = types.Color;
 const Constraint = types.Constraint;
 const Extent = types.Extent;
 const Point = types.Point;
+const Size = types.Size;
 const pass = @import("layout.zig");
 const HandlerKind = @import("node.zig").HandlerKind;
 const Resolved = @import("node.zig").Resolved;
@@ -234,22 +235,14 @@ pub fn padding(self: anytype, insets: Insets) Wrapped(@TypeOf(self), Insets) {
     return with(self, insets);
 }
 
-// Gives the child a fixed size, or one that grows up to `max_width` and
-// `max_height` where space allows, and places it inside. The child is told
-// to be no smaller than `min_width` and `min_height`, as far as the space
-// goes.
+// Gives the child the fixed `size`, or one that grows up to `max` where
+// space allows, and places it inside. The child is told to be no smaller
+// than `min`, as far as the space goes.
 const Frame = struct {
-    width: ?f32 = null,
-    height: ?f32 = null,
-    min_width: ?f32 = null,
-    min_height: ?f32 = null,
-    max_width: ?f32 = null,
-    max_height: ?f32 = null,
+    size: Size = .{},
+    min: Size = .{},
+    max: Size = .{},
     alignment: Alignment = .center,
-
-    pub fn square(side: f32) Frame {
-        return .{ .width = side, .height = side };
-    }
 
     fn outer(fixed: ?f32, max: ?f32, high: f32, child: f32) f32 {
         if (fixed) |size| return size;
@@ -261,19 +254,19 @@ const Frame = struct {
 
     pub fn measure(f: Frame, child: anytype, c: Constraint) Extent {
         const max: Extent = .{
-            .width = @min(f.width orelse f.max_width orelse types.inf, c.max.width),
-            .height = @min(f.height orelse f.max_height orelse types.inf, c.max.height),
+            .width = @min(f.size.width orelse f.max.width orelse types.inf, c.max.width),
+            .height = @min(f.size.height orelse f.max.height orelse types.inf, c.max.height),
         };
         const size = pass.measure(child, .{
             .min = .{
-                .width = @min(f.min_width orelse 0, max.width),
-                .height = @min(f.min_height orelse 0, max.height),
+                .width = @min(f.min.width orelse 0, max.width),
+                .height = @min(f.min.height orelse 0, max.height),
             },
             .max = max,
         });
         return c.constrain(.{
-            .width = outer(f.width, f.max_width, c.max.width, size.width),
-            .height = outer(f.height, f.max_height, c.max.height, size.height),
+            .width = outer(f.size.width, f.max.width, c.max.width, size.width),
+            .height = outer(f.size.height, f.max.height, c.max.height, size.height),
         });
     }
 
