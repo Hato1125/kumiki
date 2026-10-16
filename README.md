@@ -14,6 +14,7 @@ KUMIKI is a declarative UI library written in Zig that is **resolved at compile 
   - `stack`
   - `list`
   - `when`
+  - `select`
   - `each`
 - **animation**
 - **timer**

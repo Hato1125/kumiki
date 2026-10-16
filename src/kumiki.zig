@@ -81,5 +81,6 @@ pub const column = @import("view/column.zig").column;
 pub const stack = @import("view/stack.zig").stack;
 pub const list = @import("view/list.zig").list;
 pub const when = @import("view/when.zig").when;
+pub const select = @import("view/select.zig").select;
 pub const each = @import("view/each.zig").each;
 pub const Each = @import("view/each.zig").Each;
