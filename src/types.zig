@@ -3,9 +3,53 @@ const gfx = @import("gfx");
 
 pub const inf = std.math.inf(f32);
 
-pub const Point = struct { x: f32 = 0, y: f32 = 0 };
-pub const Extent = struct { width: f32 = 0, height: f32 = 0 };
-pub const Bounds = struct { x: f32 = 0, y: f32 = 0, w: f32 = 0, h: f32 = 0 };
+pub const Point = struct {
+    x: f32 = 0,
+    y: f32 = 0,
+
+    pub fn all(both: f32) Point {
+        return xy(both, both);
+    }
+
+    pub fn xy(x: f32, y: f32) Point {
+        return .{ .x = x, .y = y };
+    }
+};
+
+pub const Extent = struct {
+    width: f32 = 0,
+    height: f32 = 0,
+
+    pub fn all(side: f32) Extent {
+        return xy(side, side);
+    }
+
+    pub fn xy(width: f32, height: f32) Extent {
+        return .{ .width = width, .height = height };
+    }
+};
+
+pub const Bounds = struct {
+    x: f32 = 0,
+    y: f32 = 0,
+    w: f32 = 0,
+    h: f32 = 0,
+};
+
+/// A width and a height that each may be left out, such as the size of a
+/// frame or a bound on it. A null one leaves that axis to what is inside.
+pub const Size = struct {
+    width: ?f32 = null,
+    height: ?f32 = null,
+
+    pub fn all(side: f32) Size {
+        return xy(side, side);
+    }
+
+    pub fn xy(width: f32, height: f32) Size {
+        return .{ .width = width, .height = height };
+    }
+};
 
 /// Where something smaller sits inside a larger area: 0 is the left or top
 /// edge and 1 is the right or bottom edge.
@@ -22,6 +66,14 @@ pub const Alignment = struct {
     pub const bottom_left: Alignment = .{ .x = 0, .y = 1 };
     pub const bottom: Alignment = .{ .x = 0.5, .y = 1 };
     pub const bottom_right: Alignment = .{ .x = 1, .y = 1 };
+
+    pub fn all(both: f32) Alignment {
+        return xy(both, both);
+    }
+
+    pub fn xy(x: f32, y: f32) Alignment {
+        return .{ .x = x, .y = y };
+    }
 
     pub fn place(a: Alignment, at: Point, outer: Extent, inner: Extent) Point {
         return .{

@@ -29,8 +29,6 @@ pub const TextInput = input.TextInput;
 pub const keys = input.keys;
 pub const startup = text_zig.startup;
 pub const addFont = text_zig.addFont;
-// For an implementation: what its canvas shares to draw the text, the scale
-// to tell before every frame, and what to call before its canvas goes away.
 pub const textSystem = text_zig.system;
 pub const setTextScale = text_zig.setScale;
 pub const releaseImages = image_zig.release;
@@ -45,6 +43,7 @@ pub fn shutdown() void {
 pub const Color = types.Color;
 pub const Point = types.Point;
 pub const Extent = types.Extent;
+pub const Size = types.Size;
 pub const Bounds = types.Bounds;
 pub const Range = types.Range;
 pub const Constraint = types.Constraint;
@@ -82,5 +81,6 @@ pub const column = @import("view/column.zig").column;
 pub const stack = @import("view/stack.zig").stack;
 pub const list = @import("view/list.zig").list;
 pub const when = @import("view/when.zig").when;
+pub const select = @import("view/select.zig").select;
 pub const each = @import("view/each.zig").each;
 pub const Each = @import("view/each.zig").Each;
