@@ -80,7 +80,7 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
             return self.set("line_height", px);
         }
 
-        pub fn tracking(self: Self, px: @FieldType(Config, "letter_spacing")) Self {
+        pub fn letterSpacing(self: Self, px: @FieldType(Config, "letter_spacing")) Self {
             return self.set("letter_spacing", px);
         }
 
