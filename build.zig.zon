@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .gfx = .{
-            .url = "git+https://github.com/Hato1125/gfx.git#aa6252f0fefe69a2265408d7eb57dcfc939e5c01",
-            .hash = "gfx-0.0.0-66FrzVroAQAvtbQrTZM13XSVG16JkOmFSy1mleFxUIbk",
+            .url = "git+https://github.com/Hato1125/gfx.git#c92b8a5ac0b439eb973a1c6f57355a21eb450c19",
+            .hash = "gfx-0.0.0-66FrzZAPAgBBXSvHrHTTY82skLFgl7rHswlkXd8kJU_t",
         },
         .sdl = .{
             .url = "git+https://github.com/castholm/SDL.git?ref=v0.5.4+3.4.16#b72b3671502a70e109350ecac90afdc480dcfcc6",
