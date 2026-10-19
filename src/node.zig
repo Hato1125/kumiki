@@ -114,6 +114,10 @@ pub const Host = struct {
     copy: *const fn (*anyopaque, []const u8) bool,
 };
 
+fn configHas(comptime View: type, comptime name: []const u8) bool {
+    return isContainer(View) and @hasDecl(@FieldType(View, "config"), name);
+}
+
 pub fn isComponent(comptime T: type) bool {
     return @hasDecl(T, "view");
 }
@@ -124,8 +128,8 @@ pub fn isContainer(comptime T: type) bool {
     return !isComponent(T) and @hasField(T, "children");
 }
 
-fn configHas(comptime View: type, comptime name: []const u8) bool {
-    return isContainer(View) and @hasDecl(@FieldType(View, "config"), name);
+pub fn isAnimated(comptime View: type) bool {
+    return isContainer(View) and @hasField(@FieldType(View, "config"), "tween");
 }
 
 pub fn isShow(comptime View: type) bool {
@@ -275,7 +279,11 @@ fn Children(comptime View: type) type {
     return @Tuple(&element_types);
 }
 
-pub const Order = enum { all, shown, front };
+pub const Order = enum {
+    all,
+    shown,
+    front,
+};
 
 /// Calls `f(child, args...)` for the children of `node` until a call returns
 /// true. `shown` leaves out what a config with a `cond` does not show, such as
