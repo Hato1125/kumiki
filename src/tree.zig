@@ -10,16 +10,13 @@ const Resolved = node_zig.Resolved;
 const State = node_zig.State;
 const contains = node_zig.contains;
 const each = node_zig.each;
+const isAnimated = node_zig.isAnimated;
 const isComponent = node_zig.isComponent;
 const isContainer = node_zig.isContainer;
 const isList = node_zig.isList;
 const isShow = node_zig.isShow;
 const provides = node_zig.provides;
 const same = @import("anime.zig").same;
-
-fn isAnimated(comptime View: type) bool {
-    return isContainer(View) and @hasField(@FieldType(View, "config"), "tween");
-}
 
 // What the component `View` provides. `inner` are its owners and its own
 // node. The value cannot be made of the one it replaces.
@@ -59,13 +56,15 @@ pub fn mount(
     owners: anytype,
 ) void {
     const View = @TypeOf(value);
-    if (comptime isShow(View)) {
+    if (comptime isShow(View))
         return mount(node, resolve(value, state, owners), state, owners);
-    }
-    if (comptime node_zig.isBare(View)) return mount(node, leaf(value), state, owners);
+
+    if (comptime node_zig.isBare(View))
+        return mount(node, leaf(value), state, owners);
 
     state.next_id += 1;
     node.id = state.next_id;
+
     if (comptime @TypeOf(node.offset) != void) node.offset = .{};
     node.size = .{};
     if (comptime isComponent(View)) {
@@ -274,14 +273,17 @@ fn syncList(node: anytype, state: *State, owners: anytype) void {
     const List = @TypeOf(node.widget);
     const elements = invoke(List.source, owners, state, {});
     state.stale = true;
-    if (comptime List.keyed) return syncKeyed(node, elements, state, owners);
+    if (comptime List.keyed)
+        return syncKeyed(node, elements, state, owners);
 
     const rows = &node.children;
     const kept = @min(elements.len, rows.items.len);
-    for (rows.items[0..kept], 0..) |*row, i| {
+
+    for (rows.items[0..kept], 0..) |*row, i|
         apply(row, List.item(elements, i), state, owners, .function);
-    }
-    for (rows.items[kept..]) |*row| destroy(row, state, owners);
+    for (rows.items[kept..]) |*row|
+        destroy(row, state, owners);
+
     rows.shrinkRetainingCapacity(kept);
     rows.ensureTotalCapacity(state.gpa, elements.len) catch @panic("out of memory");
     for (kept..elements.len) |i| {
