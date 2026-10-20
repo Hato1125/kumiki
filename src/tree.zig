@@ -43,9 +43,9 @@ pub fn markChanged(
 /// holding a field received as a mutable pointer. A pointer that no owner
 /// fills in is the event, such as the result of a background function.
 pub fn markTargets(comptime f: anytype, components: anytype) void {
-    inline for (@typeInfo(@TypeOf(f)).@"fn".params) |param| {
-        const P = param.type.?;
-        if (comptime @typeInfo(P) == .pointer and !@typeInfo(P).pointer.is_const) {
+    inline for (@typeInfo(@TypeOf(f)).@"fn".param_types) |param_type| {
+        const P = param_type.?;
+        if (comptime @typeInfo(P) == .pointer and !@typeInfo(P).pointer.attrs.@"const") {
             if (comptime call.find(@TypeOf(components), P)) |from| {
                 components[from.owner].markAll();
             }

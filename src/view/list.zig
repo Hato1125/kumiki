@@ -36,7 +36,7 @@ pub fn List(comptime source_fn: anytype, comptime make: anytype) type {
         /// `make` takes a pointer to the element when its parameter is one,
         /// so rows can change their element.
         pub fn item(elements: Slice, i: usize) Row {
-            const Param = @typeInfo(@TypeOf(make)).@"fn".params[0].type.?;
+            const Param = @typeInfo(@TypeOf(make)).@"fn".param_types[0].?;
             return make(if (comptime @typeInfo(Param) == .pointer) &elements[i] else elements[i]);
         }
 

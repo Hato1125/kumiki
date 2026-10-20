@@ -66,8 +66,8 @@ fn Depth(comptime N: type) type {
             }
 
             var deepest: usize = 0;
-            for (@typeInfo(Inside).@"struct".fields) |child| {
-                deepest = @max(deepest, Depth(child.type).of);
+            for (@typeInfo(Inside).@"struct".field_types) |Child| {
+                deepest = @max(deepest, Depth(Child).of);
             }
             break :inside deepest;
         };
@@ -195,8 +195,8 @@ fn Holding(comptime N: type, comptime matches: fn (comptime type) bool) type {
                 const Row = @typeInfo(@FieldType(Inside, "items")).pointer.child;
                 break :inside Holding(Row, matches).any;
             }
-            for (@typeInfo(Inside).@"struct".fields) |child| {
-                if (Holding(child.type, matches).any) break :inside true;
+            for (@typeInfo(Inside).@"struct".field_types) |Child| {
+                if (Holding(Child, matches).any) break :inside true;
             }
             break :inside false;
         };

@@ -8,8 +8,8 @@ pub fn provided(
     inner: anytype,
     state: *model.State,
 ) model.Provided(View) {
-    comptime for (@typeInfo(@TypeOf(View.provide)).@"fn".params) |param| {
-        if (call.Pointee(param.type.?) == model.Provided(View)) {
+    comptime for (@typeInfo(@TypeOf(View.provide)).@"fn".param_types) |param_type| {
+        if (call.Pointee(param_type.?) == model.Provided(View)) {
             @compileError("the provide of " ++ @typeName(View) ++
                 " receives the type it provides");
         }

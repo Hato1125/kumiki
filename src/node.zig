@@ -47,10 +47,10 @@ fn NodeChildren(comptime View: type) type {
     const Inside = ViewChildren(View);
     if (Inside == void) return void;
 
-    const fields = @typeInfo(Inside).@"struct".fields;
-    var element_types: [fields.len]type = undefined;
-    for (fields, 0..) |field, i| {
-        element_types[i] = NodeOf(field.type);
+    const field_types = @typeInfo(Inside).@"struct".field_types;
+    var element_types: [field_types.len]type = undefined;
+    for (field_types, 0..) |Field, i| {
+        element_types[i] = NodeOf(Field);
     }
     return @Tuple(&element_types);
 }
