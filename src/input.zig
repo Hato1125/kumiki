@@ -4,7 +4,7 @@ const types = @import("types.zig");
 const Point = types.Point;
 const call = @import("call.zig");
 const invoke = call.invoke;
-const node_zig = @import("node.zig");
+const node_zig = @import("node/model.zig");
 const NodeId = node_zig.NodeId;
 const State = node_zig.State;
 const contains = node_zig.contains;
@@ -371,7 +371,7 @@ fn activates(offer: Offer, state: *const State) bool {
 fn handle(
     node: anytype,
     offer: Offer,
-    owners: anytype,
+    components: anytype,
     state: *const State,
 ) bool {
     const Widget = @TypeOf(node.widget);
@@ -380,21 +380,21 @@ fn handle(
     switch (comptime Widget.handler_kind) {
         .tap => {
             if (!activates(offer, state)) return false;
-            _ = invoke(f, owners, state, {});
+            _ = invoke(f, components, state, {});
         },
         .input => {
             if (offer != .text) return false;
-            invoke(f, owners, state, offer.text);
+            invoke(f, components, state, offer.text);
         },
-        .key => if (offer != .key or !invoke(f, owners, state, offer.key)) return false,
-        .wheel => if (offer != .wheel or !invoke(f, owners, state, offer.wheel)) return false,
+        .key => if (offer != .key or !invoke(f, components, state, offer.key)) return false,
+        .wheel => if (offer != .wheel or !invoke(f, components, state, offer.wheel)) return false,
         .pointer => {
             if (offer != .pointer) return false;
             const origin = offsetOf(node);
             var local = offer.pointer;
             local.x -= origin.x;
             local.y -= origin.y;
-            if (!invoke(f, owners, state, local)) return false;
+            if (!invoke(f, components, state, local)) return false;
         },
         .drop => {
             if (offer != .drop) return false;
@@ -402,19 +402,19 @@ fn handle(
             var local = offer.drop;
             local.x -= origin.x;
             local.y -= origin.y;
-            if (!invoke(f, owners, state, local)) return false;
+            if (!invoke(f, components, state, local)) return false;
         },
         .hover => return false,
         .shortcut => {
             if (offer != .shortcut) return false;
-            const bound: ?Chord = invoke(Widget.chord, owners, state, {});
+            const bound: ?Chord = invoke(Widget.chord, components, state, {});
             const chord = bound orelse return false;
             if (!chord.matches(offer.shortcut)) return false;
             if (chord.plain() and state.typing != null) return false;
-            _ = invoke(f, owners, state, offer.shortcut);
+            _ = invoke(f, components, state, offer.shortcut);
         },
     }
-    markTargets(f, owners);
+    markTargets(f, components);
     return true;
 }
 
@@ -424,15 +424,15 @@ pub fn bubble(
     node: anytype,
     target: NodeId,
     offer: Offer,
-    owners: anytype,
+    components: anytype,
     state: *const State,
     by: *NodeId,
 ) bool {
-    const inner = if (comptime node_zig.isComponent(@TypeOf(node.widget))) owners ++ .{node} else owners;
+    const inner = if (comptime node_zig.isComponent(@TypeOf(node.widget))) components ++ .{node} else components;
     if (node.id != target and !each(node, .shown, bubble, .{ target, offer, inner, state, by })) {
         return false;
     }
-    if (by.* == 0 and handle(node, offer, owners, state)) by.* = node.id;
+    if (by.* == 0 and handle(node, offer, components, state)) by.* = node.id;
     return true;
 }
 
@@ -451,27 +451,27 @@ fn isShortcut(comptime Widget: type) bool {
 pub fn shortcut(
     node: anytype,
     press: KeyPress,
-    owners: anytype,
+    components: anytype,
     state: *const State,
     by: *NodeId,
 ) void {
     if (comptime !binds(@TypeOf(node.*))) return;
     const offer: Offer = .{ .shortcut = press };
-    if (state.focus.len != 0) _ = bubble(node, state.focus[0], offer, owners, state, by);
-    if (by.* == 0) _ = sweep(node, offer, owners, state, by);
+    if (state.focus.len != 0) _ = bubble(node, state.focus[0], offer, components, state, by);
+    if (by.* == 0) _ = sweep(node, offer, components, state, by);
 }
 
 fn sweep(
     node: anytype,
     offer: Offer,
-    owners: anytype,
+    components: anytype,
     state: *const State,
     by: *NodeId,
 ) bool {
     if (comptime !binds(@TypeOf(node.*))) return false;
-    const inner = if (comptime node_zig.isComponent(@TypeOf(node.widget))) owners ++ .{node} else owners;
+    const inner = if (comptime node_zig.isComponent(@TypeOf(node.widget))) components ++ .{node} else components;
     if (each(node, .front, sweep, .{ offer, inner, state, by })) return true;
-    if (!handle(node, offer, owners, state)) return false;
+    if (!handle(node, offer, components, state)) return false;
     by.* = node.id;
     return true;
 }
@@ -500,13 +500,13 @@ pub const Seen = struct {
 pub fn watch(
     node: anytype,
     seen: Seen,
-    owners: anytype,
+    components: anytype,
     state: *const State,
     told: *bool,
 ) void {
     if (comptime !watches(@TypeOf(node.*))) return;
     const Widget = @TypeOf(node.widget);
-    const inner = if (comptime node_zig.isComponent(Widget)) owners ++ .{node} else owners;
+    const inner = if (comptime node_zig.isComponent(Widget)) components ++ .{node} else components;
     _ = each(node, .all, watch, .{ seen, inner, state, told });
     if (comptime !handles(Widget, .hover)) return;
 
@@ -519,18 +519,18 @@ pub fn watch(
         .x = seen.at.x - origin.x,
         .y = seen.at.y - origin.y,
     };
-    _ = invoke(Widget.handler, owners, state, hover);
-    markTargets(Widget.handler, owners);
+    _ = invoke(Widget.handler, components, state, hover);
+    markTargets(Widget.handler, components);
     told.* = true;
 }
 
 // What a function that is called later is handed: the type of the parameter
-// that the owners do not fill in, or void without one.
-fn Handed(comptime f: anytype, comptime Owners: type) type {
+// that the components do not fill in, or void without one.
+fn Handed(comptime f: anytype, comptime Components: type) type {
     var handed: type = void;
     for (@typeInfo(@TypeOf(f)).@"fn".params) |param| {
         const P = param.type orelse @compileError("parameters must have concrete types");
-        if (!call.fills(Owners, P)) handed = P;
+        if (!call.fills(Components, P)) handed = P;
     }
     return handed;
 }
@@ -538,19 +538,19 @@ fn Handed(comptime f: anytype, comptime Owners: type) type {
 /// Calls the function that `task` names, one of those that the component
 /// `target`, or the nearest one around it that has it, lists in
 /// `pub const later`. The result of a background function goes into the one
-/// parameter that the owners do not fill in. Returns whether `target` is
+/// parameter that the components do not fill in. Returns whether `target` is
 /// inside `node`.
 pub fn deliver(
     node: anytype,
     target: NodeId,
     task: *const task_zig.Task,
-    owners: anytype,
+    components: anytype,
     state: *const State,
     handled: *bool,
 ) bool {
     const Widget = @TypeOf(node.widget);
     const component = comptime node_zig.isComponent(Widget);
-    const inner = if (component) owners ++ .{node} else owners;
+    const inner = if (component) components ++ .{node} else components;
     if (node.id != target and !each(node, .all, deliver, .{ target, task, inner, state, handled })) {
         return false;
     }

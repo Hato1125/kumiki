@@ -1,0 +1,315 @@
+const std = @import("std");
+
+const Container = @import("../mod.zig").Container;
+const Tasks = @import("../task.zig").Tasks;
+const types = @import("../types.zig");
+
+/// Counts up from 1. 0 stands for no node.
+pub const NodeId = u32;
+
+/// A node and its ancestors, the node itself first, in a tree that is `depth`
+/// nodes deep, as `depthOf` counts it.
+pub fn Path(comptime depth: usize) type {
+    return struct {
+        ids: [depth]NodeId = undefined,
+        len: usize = 0,
+
+        const Self = @This();
+
+        pub fn slice(path: *const Self) []const NodeId {
+            return path.ids[0..path.len];
+        }
+
+        pub fn id(path: *const Self) NodeId {
+            return if (path.len == 0) 0 else path.ids[0];
+        }
+
+        pub fn push(path: *Self, node: NodeId) void {
+            path.ids[path.len] = node;
+            path.len += 1;
+        }
+
+        /// The part of the path from `node` up to the root.
+        pub fn from(path: *const Self, node: NodeId) Self {
+            var tail: Self = .{};
+            const start = std.mem.indexOfScalar(NodeId, path.slice(), node) orelse return tail;
+            for (path.ids[start..path.len]) |ancestor| tail.push(ancestor);
+            return tail;
+        }
+    };
+}
+
+pub fn contains(path: []const NodeId, id: NodeId) bool {
+    return std.mem.indexOfScalar(NodeId, path, id) != null;
+}
+
+/// How many nodes lie on the longest way from a node of type `N` down to a
+/// leaf, the node itself included: no path in its tree is longer.
+pub fn depthOf(comptime N: type) usize {
+    return Depth(N).of;
+}
+
+// A large tree would exceed the branch quota when counted in one evaluation,
+// so every type of node gets a declaration of its own, which counts apart.
+fn Depth(comptime N: type) type {
+    return struct {
+        const of: usize = 1 + inside: {
+            const Inside = @FieldType(N, "children");
+            if (Inside == void) break :inside 0;
+
+            if (@hasField(Inside, "items")) {
+                break :inside Depth(
+                    @typeInfo(@FieldType(Inside, "items"))
+                        .pointer
+                        .child,
+                ).of;
+            }
+
+            var deepest: usize = 0;
+            for (@typeInfo(Inside).@"struct".fields) |child| {
+                deepest = @max(deepest, Depth(child.type).of);
+            }
+            break :inside deepest;
+        };
+    };
+}
+
+/// What a scene shares with every pass over its tree. `animating`, `built` and
+/// `stale` tell what the last build did: an animation still runs, something
+/// was built again, a path may have changed because a list matched its rows
+/// again or a `when` switched. `keyboard` is whether the last input came from
+/// the keyboard, and `active` whether the keyboard is with the window of the
+/// scene at all. `tasks` lives on the heap, because functions in the
+/// background point at it while the scene may still be moved. `inputs` counts
+/// the nodes that take typed text, and `typing` is where the implementation
+/// was asked for it. `wanted` points at the component that asked for the
+/// focus, where the scene keeps it until the tree is built, and `closed` at
+/// whether a function asked to close the scene. `focus`, `hover` and `press`
+/// are the paths that the scene keeps.
+pub const State = struct {
+    gpa: std.mem.Allocator,
+    tasks: *Tasks,
+    host: Host,
+    wanted: *NodeId,
+    closed: *bool,
+    inputs: u32 = 0,
+    typing: ?types.Bounds = null,
+    active: bool = true,
+    next_id: NodeId = 0,
+    now: f64 = 0,
+    animating: bool = false,
+    built: bool = false,
+    stale: bool = false,
+    focus: []const NodeId = &.{},
+    hover: []const NodeId = &.{},
+    press: []const NodeId = &.{},
+    keyboard: bool = false,
+};
+
+/// The implementation as a Context reaches it, for its clipboard. The scene
+/// points `impl` at where the implementation is before it runs functions.
+pub const Host = struct {
+    impl: *anyopaque,
+    paste: *const fn (*anyopaque, std.mem.Allocator) ?[]const u8,
+    copy: *const fn (*anyopaque, []const u8) bool,
+};
+
+fn configHas(comptime View: type, comptime name: []const u8) bool {
+    return isContainer(View) and @hasDecl(@FieldType(View, "config"), name);
+}
+
+pub fn isComponent(comptime T: type) bool {
+    return @hasDecl(T, "view");
+}
+
+/// Every view but a component is a container: `children`, which a leaf has
+/// none of, and a `config` that measures, places and paints them.
+pub fn isContainer(comptime T: type) bool {
+    return !isComponent(T) and @hasField(T, "children");
+}
+
+pub fn isAnimated(comptime View: type) bool {
+    return isContainer(View) and @hasField(@FieldType(View, "config"), "tween");
+}
+
+pub fn isShow(comptime View: type) bool {
+    return configHas(View, "func");
+}
+
+/// Whether `T` is the view of a list or its config, which is its widget.
+pub fn isList(comptime T: type) bool {
+    return @hasDecl(T, "source") or configHas(T, "source");
+}
+
+/// A struct that is neither a component nor a container, such as one of a
+/// user's that measures and paints itself, stands for a leaf with it as the
+/// config.
+pub fn isBare(comptime T: type) bool {
+    return @typeInfo(T) == .@"struct" and !isComponent(T) and !isContainer(T);
+}
+
+/// The view that a value stands for: a bare struct is given the container of
+/// a leaf.
+pub fn Normalized(comptime View: type) type {
+    return if (isBare(View)) Container(void, View) else View;
+}
+
+pub const HandlerKind = enum {
+    tap,
+    key,
+    input,
+    wheel,
+    pointer,
+    hover,
+    drop,
+    shortcut,
+};
+
+pub fn handles(comptime T: type, comptime kind: HandlerKind) bool {
+    return @hasDecl(T, "handler_kind") and T.handler_kind == kind;
+}
+
+pub fn isFocusable(comptime T: type) bool {
+    return handles(T, .tap) or handles(T, .key) or handles(T, .input);
+}
+
+/// A popup is a container of a view and of what it shows in front of
+/// everything else while it is open.
+pub fn isPopup(comptime T: type) bool {
+    return has(T, "dismiss");
+}
+
+/// Whether the widget of a node of type `N`, or of one inside it, matches.
+pub fn holds(comptime N: type, comptime matches: fn (comptime type) bool) bool {
+    return Holding(N, matches).any;
+}
+
+// The answer is a declaration of its own for every type of node, because a
+// large tree would exceed the branch quota when counted in one evaluation.
+fn Holding(comptime N: type, comptime matches: fn (comptime type) bool) type {
+    return struct {
+        const any = matches(@FieldType(N, "widget")) or inside: {
+            const Inside = @FieldType(N, "children");
+            if (Inside == void) break :inside false;
+            if (@hasField(Inside, "items")) {
+                const Row = @typeInfo(@FieldType(Inside, "items")).pointer.child;
+                break :inside Holding(Row, matches).any;
+            }
+            for (@typeInfo(Inside).@"struct".fields) |child| {
+                if (Holding(child.type, matches).any) break :inside true;
+            }
+            break :inside false;
+        };
+    };
+}
+
+/// Whether a widget takes part in a pass through its declaration `name`. A
+/// component is walked as the container of its view, whatever it declares.
+pub fn has(comptime T: type, comptime name: []const u8) bool {
+    return !isComponent(T) and @hasDecl(T, name);
+}
+
+pub fn ReturnOf(comptime f: anytype) type {
+    return @typeInfo(@TypeOf(f)).@"fn".return_type.?;
+}
+
+/// A component that declares `pub fn provide` hands what that returns to the
+/// functions inside it, which receive it by its type as they would a field.
+pub fn provides(comptime View: type) bool {
+    return isComponent(View) and @hasDecl(View, "provide");
+}
+
+pub fn Provided(comptime View: type) type {
+    return ReturnOf(View.provide);
+}
+
+pub fn Resolved(comptime View: type) type {
+    return if (isShow(View)) ReturnOf(@FieldType(View, "config").func) else View;
+}
+
+// Whether a node of `View` keeps its position. One that leaves its children
+// where it is, as a component always does, is where its last child is and
+// keeps none.
+pub fn keepsOffset(comptime View: type) bool {
+    if (isComponent(View)) return false;
+    if (@FieldType(View, "children") == void) return true;
+    const Config = @FieldType(View, "config");
+    return @hasDecl(Config, "layout") or @hasDecl(Config, "layoutAll");
+}
+
+pub const Source = enum { written, returned };
+
+pub fn begin(node: anytype, state: *State) void {
+    state.next_id += 1;
+    node.id = state.next_id;
+    if (comptime @TypeOf(node.offset) != void) node.offset = .{};
+    node.size = .{};
+}
+
+/// Where a node is: at its own offset, or where its last child is for a node
+/// that keeps none.
+pub fn offsetOf(node: anytype) types.Point {
+    if (comptime @TypeOf(node.offset) != void) return node.offset;
+    return offsetOf(&node.children[node.children.len - 1]);
+}
+
+pub const Order = enum {
+    all,
+    shown,
+    front,
+};
+
+/// Calls `f(child, args...)` for the children of `node` until a call returns
+/// true. `shown` leaves out what a config with a `cond` does not show, such as
+/// the other side of a `when`, and `front` also starts from the child in
+/// front.
+pub fn each(
+    node: anytype,
+    comptime order: Order,
+    comptime f: anytype,
+    args: anytype,
+) bool {
+    const children = &node.children;
+    if (comptime @TypeOf(children.*) == void) return false;
+    if (comptime @hasField(@TypeOf(children.*), "items")) {
+        for (0..children.items.len) |n| {
+            const i = if (order == .front) children.items.len - 1 - n else n;
+            if (stops(@call(.auto, f, .{&children.items[i]} ++ args))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    const partly = comptime order != .all and has(@TypeOf(node.widget), "cond");
+    inline for (0..children.len) |n| {
+        const i = if (order == .front) children.len - 1 - n else n;
+        if (!partly or node.widget.shows(i)) {
+            if (stops(@call(.auto, f, .{&children[i]} ++ args))) return true;
+        }
+    }
+    return false;
+}
+
+fn stops(result: anytype) bool {
+    return @TypeOf(result) == bool and result;
+}
+
+pub fn destroyChild(node: anytype, state: *State, components: anytype) void {
+    node.destroy(state, components);
+}
+
+pub fn rebuildChild(node: anytype, state: *State, components: anytype) void {
+    node.rebuild(state, components);
+}
+
+pub fn markAllChild(node: anytype) void {
+    node.markAll();
+}
+
+pub fn markChangedChild(
+    node: anytype,
+    before: []const NodeId,
+    after: []const NodeId,
+) void {
+    node.markChanged(before, after);
+}

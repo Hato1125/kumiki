@@ -1,5 +1,5 @@
 //! A popup is a view with something to show in front of everything else. What
-//! it shows stays where it is written in the tree, so it finds its owners and
+//! it shows stays where it is written in the tree, so it finds its components and
 //! hands on its keys like any other view, but it is placed, drawn and hit in
 //! passes of its own, after the rest.
 
@@ -10,7 +10,7 @@ const invoke = @import("call.zig").invoke;
 const Target = @import("paint.zig").Target;
 const input = @import("input.zig");
 const pass = @import("layout.zig");
-const node_zig = @import("node.zig");
+const node_zig = @import("node/model.zig");
 const State = node_zig.State;
 const each = node_zig.each;
 const isPopup = node_zig.isPopup;
@@ -253,13 +253,13 @@ pub fn walkFocus(node: anytype, walk: *input.FocusWalk) bool {
 pub fn shortcut(
     node: anytype,
     press: input.KeyPress,
-    owners: anytype,
+    components: anytype,
     state: *const State,
     by: *node_zig.NodeId,
 ) bool {
     if (comptime !pops(@TypeOf(node.*))) return false;
     const Widget = @TypeOf(node.widget);
-    const inner = if (comptime node_zig.isComponent(Widget)) owners ++ .{node} else owners;
+    const inner = if (comptime node_zig.isComponent(Widget)) components ++ .{node} else components;
     if (comptime isPopup(Widget)) {
         if (node.widget.active) {
             const content = &node.children[1];
@@ -276,17 +276,17 @@ pub fn shortcut(
 /// Sets `told` when one ran.
 pub fn dismiss(
     node: anytype,
-    owners: anytype,
+    components: anytype,
     state: *const State,
     told: *bool,
 ) void {
     if (comptime !pops(@TypeOf(node.*))) return;
     const Widget = @TypeOf(node.widget);
-    const inner = if (comptime node_zig.isComponent(Widget)) owners ++ .{node} else owners;
+    const inner = if (comptime node_zig.isComponent(Widget)) components ++ .{node} else components;
     _ = each(node, .shown, dismiss, .{ inner, state, told });
     if (comptime !isPopup(Widget)) return;
     if (!node.widget.active) return;
-    _ = invoke(Widget.dismiss, owners, state, {});
-    markTargets(Widget.dismiss, owners);
+    _ = invoke(Widget.dismiss, components, state, {});
+    markTargets(Widget.dismiss, components);
     told.* = true;
 }

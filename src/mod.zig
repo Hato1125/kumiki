@@ -14,8 +14,8 @@ const Extent = types.Extent;
 const Point = types.Point;
 const Size = types.Size;
 const pass = @import("layout.zig");
-const HandlerKind = @import("node.zig").HandlerKind;
-const Resolved = @import("node.zig").Resolved;
+const HandlerKind = @import("node/model.zig").HandlerKind;
+const Resolved = @import("node/model.zig").Resolved;
 const Painter = @import("paint.zig").Painter;
 const popup_zig = @import("popup.zig");
 
