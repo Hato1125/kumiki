@@ -1,8 +1,13 @@
 const std = @import("std");
 
 const Container = @import("mod.zig").Container;
+const leaf = @import("mod.zig").leaf;
 const Tasks = @import("task.zig").Tasks;
 const types = @import("types.zig");
+const call = @import("call.zig");
+const invoke = call.invoke;
+const same = @import("anime.zig").same;
+const pass = @import("layout.zig");
 
 /// Counts up from 1. 0 stands for no node.
 pub const NodeId = u32;
@@ -237,6 +242,48 @@ fn keepsOffset(comptime View: type) bool {
     return @hasDecl(Config, "layout") or @hasDecl(Config, "layoutAll");
 }
 
+pub const Origin = enum { view, function };
+
+fn provided(comptime View: type, inner: anytype, state: *State) Provided(View) {
+    comptime for (@typeInfo(@TypeOf(View.provide)).@"fn".params) |param| {
+        if (call.Pointee(param.type.?) == Provided(View)) {
+            @compileError("the provide of " ++ @typeName(View) ++
+                " receives the type it provides");
+        }
+    };
+    return invoke(View.provide, inner, state, {});
+}
+
+fn resolve(
+    value: anytype,
+    state: *State,
+    owners: anytype,
+) Resolved(@TypeOf(value)) {
+    const Value = @TypeOf(value);
+    if (comptime !isShow(Value)) return value;
+    return invoke(@FieldType(Value, "config").func, owners, state, {});
+}
+
+fn destroyChild(node: anytype, state: *State, owners: anytype) void {
+    node.destroy(state, owners);
+}
+
+fn rebuildChild(node: anytype, state: *State, owners: anytype) void {
+    node.rebuild(state, owners);
+}
+
+fn markAllChild(node: anytype) void {
+    node.markAll();
+}
+
+fn markChangedChild(
+    node: anytype,
+    before: []const NodeId,
+    after: []const NodeId,
+) void {
+    node.markChanged(before, after);
+}
+
 /// The widget of a container is its config, because its children have nodes
 /// of their own. The arena holds the strings made by Context.print until the
 /// next build, and `given` what the component provided at its last build.
@@ -251,6 +298,263 @@ pub fn Node(comptime View: type) type {
         dirty: if (isComponent(View)) bool else void,
         arena: if (isComponent(View)) std.heap.ArenaAllocator.State else void,
         given: if (provides(View)) Provided(View) else void,
+
+        const Self = @This();
+
+        pub fn mount(
+            node: *Self,
+            value: anytype,
+            state: *State,
+            owners: anytype,
+        ) void {
+            const Value = @TypeOf(value);
+            if (comptime isShow(Value))
+                return node.mount(resolve(value, state, owners), state, owners);
+            if (comptime isBare(Value))
+                return node.mount(leaf(value), state, owners);
+
+            state.next_id += 1;
+            node.id = state.next_id;
+
+            if (comptime @TypeOf(node.offset) != void) node.offset = .{};
+            node.size = .{};
+            if (comptime isComponent(Value)) {
+                node.widget = value;
+                node.dirty = false;
+                node.arena = .init;
+                const inner = owners ++ .{node};
+                if (comptime @hasDecl(Value, "mount")) {
+                    invoke(Value.mount, inner, state, {});
+                }
+                if (comptime provides(Value)) node.given = provided(Value, inner, state);
+                node.children[0].mount(Value.view, state, inner);
+            } else if (comptime isList(Value)) {
+                node.widget = value.config;
+                node.children = .empty;
+                node.syncList(state, owners);
+            } else if (comptime isAnimated(Value)) {
+                const target = resolve(value.children[0], state, owners);
+                node.widget = .{ .spec = value.config.spec, .tween = .init(target) };
+                node.children[0].mount(target, state, owners);
+            } else {
+                node.widget = value.config;
+                if (comptime handles(@TypeOf(value.config), .input)) {
+                    state.inputs += 1;
+                }
+                if (comptime @hasDecl(@TypeOf(value.config), "cond")) {
+                    node.widget.active = invoke(@TypeOf(value.config).cond, owners, state, {});
+                }
+                if (comptime @TypeOf(value.children) == void) return;
+                inline for (0..value.children.len) |i| {
+                    node.children[i].mount(value.children[i], state, owners);
+                }
+            }
+        }
+
+        pub fn destroy(node: *Self, state: *State, owners: anytype) void {
+            const Widget = @TypeOf(node.widget);
+            const inner = if (comptime isComponent(Widget)) owners ++ .{node} else owners;
+            _ = each(node, .all, destroyChild, .{ state, inner });
+            if (comptime handles(Widget, .input)) state.inputs -= 1;
+            if (comptime isComponent(Widget)) {
+                if (comptime @hasDecl(Widget, "unmount")) {
+                    invoke(Widget.unmount, inner, state, {});
+                }
+                node.arena.promote(state.gpa).deinit();
+            } else if (comptime isList(Widget)) {
+                node.children.deinit(state.gpa);
+                node.widget.deinitKeys(state.gpa);
+            }
+        }
+
+        pub fn apply(
+            node: *Self,
+            value: anytype,
+            state: *State,
+            owners: anytype,
+            comptime origin: Origin,
+        ) void {
+            const Value = @TypeOf(value);
+            if (comptime isShow(Value)) {
+                return node.apply(resolve(value, state, owners), state, owners, .function);
+            }
+            if (comptime isBare(Value)) {
+                return node.apply(leaf(value), state, owners, origin);
+            }
+
+            if (comptime isComponent(Value)) {
+                if (origin == .view) return;
+                if (!std.meta.eql(node.widget, value)) node.dirty = true;
+                node.widget = value;
+            } else if (comptime isList(Value)) {
+                if (origin == .function) node.widget.adopt(value.config);
+                node.syncList(state, owners);
+            } else if (comptime isAnimated(Value)) {
+                const Child = @TypeOf(value.children[0]);
+                const spec = value.config.spec;
+                const tween = &node.widget.tween;
+                node.widget.spec = spec;
+                tween.retarget(spec, resolve(value.children[0], state, owners), state.now);
+                const shown: Origin = if (comptime isShow(Child)) .function else origin;
+                node.children[0].apply(tween.at(spec, state.now), state, owners, shown);
+                if (tween.running) state.animating = true;
+            } else {
+                if (comptime @hasDecl(@TypeOf(value.config), "cond")) {
+                    const active = invoke(@TypeOf(value.config).cond, owners, state, {});
+                    if (active != node.widget.active) state.stale = true;
+                    if (origin == .function) {
+                        if (comptime @hasDecl(@TypeOf(value.config), "adopt")) {
+                            node.widget.adopt(value.config);
+                        } else {
+                            node.widget = value.config;
+                        }
+                    }
+                    node.widget.active = active;
+                } else if (origin == .function) {
+                    node.widget = value.config;
+                }
+                if (comptime @TypeOf(value.children) == void) return;
+                inline for (0..value.children.len) |i| {
+                    node.children[i].apply(value.children[i], state, owners, origin);
+                }
+            }
+        }
+
+        pub fn rebuild(node: *Self, state: *State, owners: anytype) void {
+            const Widget = @TypeOf(node.widget);
+            if (comptime isComponent(Widget)) {
+                const inner = owners ++ .{node};
+                if (node.dirty) {
+                    @branchHint(.unlikely);
+                    const last = node.arena.promote(state.gpa);
+                    node.arena = .init;
+                    node.dirty = false;
+                    state.built = true;
+
+                    if (comptime provides(Widget)) {
+                        const next = provided(Widget, inner, state);
+                        if (!same(Provided(Widget), next, node.given)) {
+                            node.children[0].markAll();
+                        }
+                        node.given = next;
+                    }
+                    node.children[0].apply(Widget.view, state, inner, .view);
+                    node.children[0].rebuild(state, inner);
+                    return last.deinit();
+                }
+                return node.children[0].rebuild(state, inner);
+            }
+            if (comptime @TypeOf(node.children) == void) return;
+            if (comptime @hasField(Widget, "tween")) {
+                const tween = &node.widget.tween;
+                if (tween.running) {
+                    node.children[0].apply(
+                        tween.at(node.widget.spec, state.now),
+                        state,
+                        owners,
+                        .function,
+                    );
+
+                    tween.finish(node.widget.spec, state.now);
+                    if (tween.running) state.animating = true;
+                    const size = node.size;
+                    if (std.meta.eql(pass.measure(node, node.widget.constraint), size)) {
+                        pass.layout(node, offsetOf(node));
+                    } else {
+                        state.built = true;
+                    }
+                }
+            }
+            _ = each(node, .all, rebuildChild, .{ state, owners });
+        }
+
+        pub fn markAll(node: *Self) void {
+            if (comptime isComponent(@TypeOf(node.widget))) node.dirty = true;
+            _ = each(node, .all, markAllChild, .{});
+        }
+
+        pub fn markChanged(
+            node: *Self,
+            before: []const NodeId,
+            after: []const NodeId,
+        ) void {
+            const was = contains(before, node.id);
+            const is = contains(after, node.id);
+            if (!was and !is) return;
+            if (comptime isComponent(@TypeOf(node.widget))) {
+                if (was != is) node.dirty = true;
+            }
+            _ = each(node, .all, markChangedChild, .{ before, after });
+        }
+
+        fn syncList(node: *Self, state: *State, owners: anytype) void {
+            const List = @TypeOf(node.widget);
+            const elements = invoke(List.source, owners, state, {});
+            state.stale = true;
+            if (comptime List.keyed)
+                return node.syncKeyed(elements, state, owners);
+
+            const rows = &node.children;
+            const kept = @min(elements.len, rows.items.len);
+
+            for (rows.items[0..kept], 0..) |*row, i|
+                row.apply(List.item(elements, i), state, owners, .function);
+            for (rows.items[kept..]) |*row|
+                row.destroy(state, owners);
+
+            rows.shrinkRetainingCapacity(kept);
+            rows.ensureTotalCapacity(state.gpa, elements.len) catch @panic("out of memory");
+            for (kept..elements.len) |i| {
+                rows.addOneAssumeCapacity().mount(List.item(elements, i), state, owners);
+            }
+        }
+
+        fn syncKeyed(
+            node: *Self,
+            elements: anytype,
+            state: *State,
+            owners: anytype,
+        ) void {
+            const List = @TypeOf(node.widget);
+            var old_rows = node.children;
+            var old_keys = node.widget.keys;
+            defer old_rows.deinit(state.gpa);
+            defer old_keys.deinit(state.gpa);
+
+            const rows = &node.children;
+            const keys = &node.widget.keys;
+            rows.* = .empty;
+            keys.* = .empty;
+            rows.ensureTotalCapacityPrecise(state.gpa, elements.len) catch @panic("out of memory");
+            keys.ensureTotalCapacityPrecise(state.gpa, elements.len) catch @panic("out of memory");
+
+            var next: usize = 0;
+            for (elements, 0..) |element, i| {
+                const row = rows.addOneAssumeCapacity();
+                const found = for (0..old_rows.items.len) |n| {
+                    const j = (next + n) % old_rows.items.len;
+                    if (old_rows.items[j].id != 0 and List.sameKey(old_keys.items[j], element.id)) {
+                        break j;
+                    }
+                } else null;
+
+                if (found) |j| {
+                    row.* = old_rows.items[j];
+                    old_rows.items[j].id = 0;
+                    keys.appendAssumeCapacity(old_keys.items[j]);
+                    row.apply(List.item(elements, i), state, owners, .function);
+                    next = j + 1;
+                } else {
+                    keys.appendAssumeCapacity(List.ownKey(state.gpa, element.id));
+                    row.mount(List.item(elements, i), state, owners);
+                }
+            }
+            for (old_rows.items, old_keys.items) |*row, key| {
+                if (row.id == 0) continue;
+                row.destroy(state, owners);
+                List.freeKey(state.gpa, key);
+            }
+        }
     };
 }
 
