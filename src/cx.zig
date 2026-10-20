@@ -3,7 +3,7 @@
 
 const std = @import("std");
 
-const node_zig = @import("node.zig");
+const node_zig = @import("node/model.zig");
 const contains = node_zig.contains;
 const keyOf = @import("task.zig").keyOf;
 const types = @import("types.zig");

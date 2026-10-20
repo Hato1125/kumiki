@@ -2,7 +2,7 @@ const std = @import("std");
 const gfx = @import("gfx");
 
 const types = @import("types.zig");
-const node_zig = @import("node.zig");
+const node_zig = @import("node/model.zig");
 const has = node_zig.has;
 
 /// What a frame is drawn to. `now` is the time of the frame and `again` is

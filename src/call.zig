@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Context = @import("cx.zig");
-const node_zig = @import("node.zig");
+const node_zig = @import("node/model.zig");
 const ReturnOf = node_zig.ReturnOf;
 const State = node_zig.State;
 const tree = @import("tree.zig");
