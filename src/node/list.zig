@@ -1,15 +1,33 @@
 const std = @import("std");
 
 const model = @import("model.zig");
+const types = @import("../types.zig");
 const value_mod = @import("value.zig");
 const call = @import("../call.zig");
+
+const NodeId = model.NodeId;
+const State = model.State;
+const Source = model.Source;
+const Point = types.Point;
+const Extent = types.Extent;
+const begin = model.begin;
+const contains = model.contains;
+const each = model.each;
+const handles = model.handles;
+const isShow = model.isShow;
+const keepsOffset = model.keepsOffset;
+const destroyChild = model.destroyChild;
+const rebuildChild = model.rebuildChild;
+const markAllChild = model.markAllChild;
+const markChangedChild = model.markChangedChild;
 const invoke = call.invoke;
+const resolve = value_mod.resolve;
 
 pub fn ListNode(comptime View: type, comptime Row: type) type {
     return struct {
-        id: model.NodeId,
-        offset: if (model.keepsOffset(View)) @import("../types.zig").Point else void,
-        size: @import("../types.zig").Extent,
+        id: NodeId,
+        offset: if (keepsOffset(View)) Point else void,
+        size: Extent,
         widget: @FieldType(View, "config"),
         children: std.ArrayList(Row),
 
@@ -18,18 +36,15 @@ pub fn ListNode(comptime View: type, comptime Row: type) type {
         pub fn mount(
             node: *Self,
             value: anytype,
-            state: *model.State,
+            state: *State,
             components: anytype,
         ) void {
             const Value = @TypeOf(value);
-            if (comptime model.isShow(Value)) {
-                return node.mount(value_mod.resolve(value, state, components), state, components);
-            }
+            if (comptime isShow(Value))
+                return node.mount(resolve(value, state, components), state, components);
 
-            state.next_id += 1;
-            node.id = state.next_id;
-            if (comptime @TypeOf(node.offset) != void) node.offset = .{};
-            node.size = .{};
+            begin(node, state);
+
             node.widget = value.config;
             node.children = .empty;
             node.syncList(state, components);
@@ -38,52 +53,48 @@ pub fn ListNode(comptime View: type, comptime Row: type) type {
         pub fn apply(
             node: *Self,
             value: anytype,
-            state: *model.State,
+            state: *State,
             components: anytype,
-            comptime origin: model.Source,
+            comptime origin: Source,
         ) void {
             const Value = @TypeOf(value);
-            if (comptime model.isShow(Value)) {
+            if (comptime isShow(Value))
                 return node.apply(
-                    value_mod.resolve(value, state, components),
+                    resolve(value, state, components),
                     state,
                     components,
                     .returned,
                 );
-            }
+
             if (origin == .returned) node.widget.adopt(value.config);
             node.syncList(state, components);
         }
 
-        pub fn rebuild(node: *Self, state: *model.State, components: anytype) void {
-            _ = model.each(node, .all, model.rebuildChild, .{ state, components });
+        pub fn rebuild(node: *Self, state: *State, components: anytype) void {
+            _ = each(node, .all, rebuildChild, .{ state, components });
         }
 
-        pub fn destroy(node: *Self, state: *model.State, components: anytype) void {
-            _ = model.each(node, .all, model.destroyChild, .{ state, components });
-            if (comptime model.handles(@TypeOf(node.widget), .input)) {
-                state.inputs -= 1;
-            }
+        pub fn destroy(node: *Self, state: *State, components: anytype) void {
+            _ = each(node, .all, destroyChild, .{ state, components });
+            if (comptime handles(@TypeOf(node.widget), .input)) state.inputs -= 1;
             node.children.deinit(state.gpa);
             node.widget.deinitKeys(state.gpa);
         }
 
         pub fn markAll(node: *Self) void {
-            _ = model.each(node, .all, model.markAllChild, .{});
+            _ = each(node, .all, markAllChild, .{});
         }
 
         pub fn markChanged(
             node: *Self,
-            before: []const model.NodeId,
-            after: []const model.NodeId,
+            before: []const NodeId,
+            after: []const NodeId,
         ) void {
-            if (!model.contains(before, node.id) and !model.contains(after, node.id)) {
-                return;
-            }
-            _ = model.each(node, .all, model.markChangedChild, .{ before, after });
+            if (!contains(before, node.id) and !contains(after, node.id)) return;
+            _ = each(node, .all, markChangedChild, .{ before, after });
         }
 
-        fn syncList(node: *Self, state: *model.State, components: anytype) void {
+        fn syncList(node: *Self, state: *State, components: anytype) void {
             const List = @TypeOf(node.widget);
             const elements = invoke(List.source, components, state, {});
             state.stale = true;
@@ -100,15 +111,18 @@ pub fn ListNode(comptime View: type, comptime Row: type) type {
 
             rows.shrinkRetainingCapacity(kept);
             rows.ensureTotalCapacity(state.gpa, elements.len) catch @panic("out of memory");
-            for (kept..elements.len) |i| {
-                rows.addOneAssumeCapacity().mount(List.item(elements, i), state, components);
-            }
+            for (kept..elements.len) |i|
+                rows.addOneAssumeCapacity().mount(
+                    List.item(elements, i),
+                    state,
+                    components,
+                );
         }
 
         fn syncKeyed(
             node: *Self,
             elements: anytype,
-            state: *model.State,
+            state: *State,
             components: anytype,
         ) void {
             const List = @TypeOf(node.widget);

@@ -34,7 +34,11 @@ pub fn normalize(
 ) model.Normalized(model.Resolved(@TypeOf(value))) {
     const Value = @TypeOf(value);
     if (comptime model.isShow(Value)) {
-        return normalize(resolve(value, state, components), state, components);
+        return normalize(
+            resolve(value, state, components),
+            state,
+            components,
+        );
     }
     if (comptime model.isBare(Value)) {
         return leaf(value);

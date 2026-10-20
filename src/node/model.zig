@@ -239,6 +239,13 @@ pub fn keepsOffset(comptime View: type) bool {
 
 pub const Source = enum { written, returned };
 
+pub fn begin(node: anytype, state: *State) void {
+    state.next_id += 1;
+    node.id = state.next_id;
+    if (comptime @TypeOf(node.offset) != void) node.offset = .{};
+    node.size = .{};
+}
+
 /// Where a node is: at its own offset, or where its last child is for a node
 /// that keeps none.
 pub fn offsetOf(node: anytype) types.Point {
