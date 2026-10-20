@@ -20,21 +20,21 @@ pub fn provided(
 pub fn resolve(
     value: anytype,
     state: *model.State,
-    owners: anytype,
+    components: anytype,
 ) model.Resolved(@TypeOf(value)) {
     const Value = @TypeOf(value);
     if (comptime !model.isShow(Value)) return value;
-    return invoke(@FieldType(Value, "config").func, owners, state, {});
+    return invoke(@FieldType(Value, "config").func, components, state, {});
 }
 
 pub fn normalize(
     value: anytype,
     state: *model.State,
-    owners: anytype,
+    components: anytype,
 ) model.Normalized(model.Resolved(@TypeOf(value))) {
     const Value = @TypeOf(value);
     if (comptime model.isShow(Value)) {
-        return normalize(resolve(value, state, owners), state, owners);
+        return normalize(resolve(value, state, components), state, components);
     }
     if (comptime model.isBare(Value)) {
         return leaf(value);

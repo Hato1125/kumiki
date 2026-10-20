@@ -17,14 +17,14 @@ pub fn ContainerNode(comptime View: type, comptime Children: type) type {
             node: *Self,
             value: anytype,
             state: *model.State,
-            owners: anytype,
+            components: anytype,
         ) void {
             const Value = @TypeOf(value);
             if (comptime model.isShow(Value)) {
-                return node.mount(value_mod.resolve(value, state, owners), state, owners);
+                return node.mount(value_mod.resolve(value, state, components), state, components);
             }
             if (comptime model.isBare(Value)) {
-                return node.mount(value_mod.normalize(value, state, owners), state, owners);
+                return node.mount(value_mod.normalize(value, state, components), state, components);
             }
 
             state.next_id += 1;
@@ -36,11 +36,11 @@ pub fn ContainerNode(comptime View: type, comptime Children: type) type {
                 state.inputs += 1;
             }
             if (comptime @hasDecl(@TypeOf(value.config), "cond")) {
-                node.widget.active = invoke(@TypeOf(value.config).cond, owners, state, {});
+                node.widget.active = invoke(@TypeOf(value.config).cond, components, state, {});
             }
             if (comptime @TypeOf(value.children) == void) return;
             inline for (0..value.children.len) |i| {
-                node.children[i].mount(value.children[i], state, owners);
+                node.children[i].mount(value.children[i], state, components);
             }
         }
 
@@ -48,31 +48,31 @@ pub fn ContainerNode(comptime View: type, comptime Children: type) type {
             node: *Self,
             value: anytype,
             state: *model.State,
-            owners: anytype,
-            comptime origin: model.Origin,
+            components: anytype,
+            comptime origin: model.Source,
         ) void {
             const Value = @TypeOf(value);
             if (comptime model.isShow(Value)) {
                 return node.apply(
-                    value_mod.resolve(value, state, owners),
+                    value_mod.resolve(value, state, components),
                     state,
-                    owners,
-                    .function,
+                    components,
+                    .returned,
                 );
             }
             if (comptime model.isBare(Value)) {
                 return node.apply(
-                    value_mod.normalize(value, state, owners),
+                    value_mod.normalize(value, state, components),
                     state,
-                    owners,
+                    components,
                     origin,
                 );
             }
 
             if (comptime @hasDecl(@TypeOf(value.config), "cond")) {
-                const active = invoke(@TypeOf(value.config).cond, owners, state, {});
+                const active = invoke(@TypeOf(value.config).cond, components, state, {});
                 if (active != node.widget.active) state.stale = true;
-                if (origin == .function) {
+                if (origin == .returned) {
                     if (comptime @hasDecl(@TypeOf(value.config), "adopt")) {
                         node.widget.adopt(value.config);
                     } else {
@@ -80,22 +80,22 @@ pub fn ContainerNode(comptime View: type, comptime Children: type) type {
                     }
                 }
                 node.widget.active = active;
-            } else if (origin == .function) {
+            } else if (origin == .returned) {
                 node.widget = value.config;
             }
             if (comptime @TypeOf(value.children) == void) return;
             inline for (0..value.children.len) |i| {
-                node.children[i].apply(value.children[i], state, owners, origin);
+                node.children[i].apply(value.children[i], state, components, origin);
             }
         }
 
-        pub fn rebuild(node: *Self, state: *model.State, owners: anytype) void {
+        pub fn rebuild(node: *Self, state: *model.State, components: anytype) void {
             if (comptime @TypeOf(node.children) == void) return;
-            _ = model.each(node, .all, model.rebuildChild, .{ state, owners });
+            _ = model.each(node, .all, model.rebuildChild, .{ state, components });
         }
 
-        pub fn destroy(node: *Self, state: *model.State, owners: anytype) void {
-            _ = model.each(node, .all, model.destroyChild, .{ state, owners });
+        pub fn destroy(node: *Self, state: *model.State, components: anytype) void {
+            _ = model.each(node, .all, model.destroyChild, .{ state, components });
             if (comptime model.handles(@TypeOf(node.widget), .input)) {
                 state.inputs -= 1;
             }

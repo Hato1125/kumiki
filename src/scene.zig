@@ -383,9 +383,9 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 @compileError("the closing of " ++ @typeName(Root) ++
                     " must return a bool");
             }
-            const owners = .{&s.root};
-            if (invoke(Root.closing, owners, &s.state, {})) return true;
-            tree.markTargets(Root.closing, owners);
+            const components = .{&s.root};
+            if (invoke(Root.closing, components, &s.state, {})) return true;
+            tree.markTargets(Root.closing, components);
             s.pending = true;
             return false;
         }

@@ -19,11 +19,11 @@ pub fn ListNode(comptime View: type, comptime Row: type) type {
             node: *Self,
             value: anytype,
             state: *model.State,
-            owners: anytype,
+            components: anytype,
         ) void {
             const Value = @TypeOf(value);
             if (comptime model.isShow(Value)) {
-                return node.mount(value_mod.resolve(value, state, owners), state, owners);
+                return node.mount(value_mod.resolve(value, state, components), state, components);
             }
 
             state.next_id += 1;
@@ -32,35 +32,35 @@ pub fn ListNode(comptime View: type, comptime Row: type) type {
             node.size = .{};
             node.widget = value.config;
             node.children = .empty;
-            node.syncList(state, owners);
+            node.syncList(state, components);
         }
 
         pub fn apply(
             node: *Self,
             value: anytype,
             state: *model.State,
-            owners: anytype,
-            comptime origin: model.Origin,
+            components: anytype,
+            comptime origin: model.Source,
         ) void {
             const Value = @TypeOf(value);
             if (comptime model.isShow(Value)) {
                 return node.apply(
-                    value_mod.resolve(value, state, owners),
+                    value_mod.resolve(value, state, components),
                     state,
-                    owners,
-                    .function,
+                    components,
+                    .returned,
                 );
             }
-            if (origin == .function) node.widget.adopt(value.config);
-            node.syncList(state, owners);
+            if (origin == .returned) node.widget.adopt(value.config);
+            node.syncList(state, components);
         }
 
-        pub fn rebuild(node: *Self, state: *model.State, owners: anytype) void {
-            _ = model.each(node, .all, model.rebuildChild, .{ state, owners });
+        pub fn rebuild(node: *Self, state: *model.State, components: anytype) void {
+            _ = model.each(node, .all, model.rebuildChild, .{ state, components });
         }
 
-        pub fn destroy(node: *Self, state: *model.State, owners: anytype) void {
-            _ = model.each(node, .all, model.destroyChild, .{ state, owners });
+        pub fn destroy(node: *Self, state: *model.State, components: anytype) void {
+            _ = model.each(node, .all, model.destroyChild, .{ state, components });
             if (comptime model.handles(@TypeOf(node.widget), .input)) {
                 state.inputs -= 1;
             }
@@ -83,25 +83,25 @@ pub fn ListNode(comptime View: type, comptime Row: type) type {
             _ = model.each(node, .all, model.markChangedChild, .{ before, after });
         }
 
-        fn syncList(node: *Self, state: *model.State, owners: anytype) void {
+        fn syncList(node: *Self, state: *model.State, components: anytype) void {
             const List = @TypeOf(node.widget);
-            const elements = invoke(List.source, owners, state, {});
+            const elements = invoke(List.source, components, state, {});
             state.stale = true;
             if (comptime List.keyed)
-                return node.syncKeyed(elements, state, owners);
+                return node.syncKeyed(elements, state, components);
 
             const rows = &node.children;
             const kept = @min(elements.len, rows.items.len);
 
             for (rows.items[0..kept], 0..) |*row, i|
-                row.apply(List.item(elements, i), state, owners, .function);
+                row.apply(List.item(elements, i), state, components, .returned);
             for (rows.items[kept..]) |*row|
-                row.destroy(state, owners);
+                row.destroy(state, components);
 
             rows.shrinkRetainingCapacity(kept);
             rows.ensureTotalCapacity(state.gpa, elements.len) catch @panic("out of memory");
             for (kept..elements.len) |i| {
-                rows.addOneAssumeCapacity().mount(List.item(elements, i), state, owners);
+                rows.addOneAssumeCapacity().mount(List.item(elements, i), state, components);
             }
         }
 
@@ -109,7 +109,7 @@ pub fn ListNode(comptime View: type, comptime Row: type) type {
             node: *Self,
             elements: anytype,
             state: *model.State,
-            owners: anytype,
+            components: anytype,
         ) void {
             const List = @TypeOf(node.widget);
             var old_rows = node.children;
@@ -138,16 +138,16 @@ pub fn ListNode(comptime View: type, comptime Row: type) type {
                     row.* = old_rows.items[j];
                     old_rows.items[j].id = 0;
                     keys.appendAssumeCapacity(old_keys.items[j]);
-                    row.apply(List.item(elements, i), state, owners, .function);
+                    row.apply(List.item(elements, i), state, components, .returned);
                     next = j + 1;
                 } else {
                     keys.appendAssumeCapacity(List.ownKey(state.gpa, element.id));
-                    row.mount(List.item(elements, i), state, owners);
+                    row.mount(List.item(elements, i), state, components);
                 }
             }
             for (old_rows.items, old_keys.items) |*row, key| {
                 if (row.id == 0) continue;
-                row.destroy(state, owners);
+                row.destroy(state, components);
                 List.freeKey(state.gpa, key);
             }
         }

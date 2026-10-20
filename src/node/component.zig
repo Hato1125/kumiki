@@ -23,11 +23,11 @@ pub fn ComponentNode(comptime View: type, comptime Child: type) type {
             node: *Self,
             value: anytype,
             state: *model.State,
-            owners: anytype,
+            components: anytype,
         ) void {
             const Value = @TypeOf(value);
             if (comptime model.isShow(Value)) {
-                return node.mount(value_mod.resolve(value, state, owners), state, owners);
+                return node.mount(value_mod.resolve(value, state, components), state, components);
             }
 
             state.next_id += 1;
@@ -38,7 +38,7 @@ pub fn ComponentNode(comptime View: type, comptime Child: type) type {
             node.dirty = false;
             node.arena = .init;
 
-            const inner = owners ++ .{node};
+            const inner = components ++ .{node};
             if (comptime @hasDecl(Value, "mount")) {
                 invoke(Value.mount, inner, state, {});
             }
@@ -52,25 +52,25 @@ pub fn ComponentNode(comptime View: type, comptime Child: type) type {
             node: *Self,
             value: anytype,
             state: *model.State,
-            owners: anytype,
-            comptime origin: model.Origin,
+            components: anytype,
+            comptime origin: model.Source,
         ) void {
             const Value = @TypeOf(value);
             if (comptime model.isShow(Value)) {
                 return node.apply(
-                    value_mod.resolve(value, state, owners),
+                    value_mod.resolve(value, state, components),
                     state,
-                    owners,
-                    .function,
+                    components,
+                    .returned,
                 );
             }
-            if (origin == .view) return;
+            if (origin == .written) return;
             if (!std.meta.eql(node.widget, value)) node.dirty = true;
             node.widget = value;
         }
 
-        pub fn rebuild(node: *Self, state: *model.State, owners: anytype) void {
-            const inner = owners ++ .{node};
+        pub fn rebuild(node: *Self, state: *model.State, components: anytype) void {
+            const inner = components ++ .{node};
             if (!node.dirty) return node.children[0].rebuild(state, inner);
 
             const last = node.arena.promote(state.gpa);
@@ -85,13 +85,13 @@ pub fn ComponentNode(comptime View: type, comptime Child: type) type {
                 }
                 node.given = next;
             }
-            node.children[0].apply(View.view, state, inner, .view);
+            node.children[0].apply(View.view, state, inner, .written);
             node.children[0].rebuild(state, inner);
             last.deinit();
         }
 
-        pub fn destroy(node: *Self, state: *model.State, owners: anytype) void {
-            const inner = owners ++ .{node};
+        pub fn destroy(node: *Self, state: *model.State, components: anytype) void {
+            const inner = components ++ .{node};
             _ = model.each(node, .all, model.destroyChild, .{ state, inner });
             if (comptime model.handles(View, .input)) state.inputs -= 1;
             if (comptime @hasDecl(View, "unmount")) {

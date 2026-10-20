@@ -18,36 +18,36 @@ pub fn AnimatedNode(comptime View: type, comptime Child: type) type {
             node: *Self,
             value: anytype,
             state: *model.State,
-            owners: anytype,
+            components: anytype,
         ) void {
             const Value = @TypeOf(value);
             if (comptime model.isShow(Value)) {
-                return node.mount(value_mod.resolve(value, state, owners), state, owners);
+                return node.mount(value_mod.resolve(value, state, components), state, components);
             }
 
             state.next_id += 1;
             node.id = state.next_id;
             if (comptime @TypeOf(node.offset) != void) node.offset = .{};
             node.size = .{};
-            const target = value_mod.resolve(value.children[0], state, owners);
+            const target = value_mod.resolve(value.children[0], state, components);
             node.widget = .{ .spec = value.config.spec, .tween = .init(target) };
-            node.children[0].mount(target, state, owners);
+            node.children[0].mount(target, state, components);
         }
 
         pub fn apply(
             node: *Self,
             value: anytype,
             state: *model.State,
-            owners: anytype,
-            comptime origin: model.Origin,
+            components: anytype,
+            comptime origin: model.Source,
         ) void {
             const Value = @TypeOf(value);
             if (comptime model.isShow(Value)) {
                 return node.apply(
-                    value_mod.resolve(value, state, owners),
+                    value_mod.resolve(value, state, components),
                     state,
-                    owners,
-                    .function,
+                    components,
+                    .returned,
                 );
             }
 
@@ -55,20 +55,20 @@ pub fn AnimatedNode(comptime View: type, comptime Child: type) type {
             const spec = value.config.spec;
             const tween = &node.widget.tween;
             node.widget.spec = spec;
-            tween.retarget(spec, value_mod.resolve(value.children[0], state, owners), state.now);
-            const shown: model.Origin = if (comptime model.isShow(ChildView)) .function else origin;
-            node.children[0].apply(tween.at(spec, state.now), state, owners, shown);
+            tween.retarget(spec, value_mod.resolve(value.children[0], state, components), state.now);
+            const shown: model.Source = if (comptime model.isShow(ChildView)) .returned else origin;
+            node.children[0].apply(tween.at(spec, state.now), state, components, shown);
             if (tween.running) state.animating = true;
         }
 
-        pub fn rebuild(node: *Self, state: *model.State, owners: anytype) void {
+        pub fn rebuild(node: *Self, state: *model.State, components: anytype) void {
             const tween = &node.widget.tween;
             if (tween.running) {
                 node.children[0].apply(
                     tween.at(node.widget.spec, state.now),
                     state,
-                    owners,
-                    .function,
+                    components,
+                    .returned,
                 );
 
                 tween.finish(node.widget.spec, state.now);
@@ -80,11 +80,11 @@ pub fn AnimatedNode(comptime View: type, comptime Child: type) type {
                     state.built = true;
                 }
             }
-            _ = model.each(node, .all, model.rebuildChild, .{ state, owners });
+            _ = model.each(node, .all, model.rebuildChild, .{ state, components });
         }
 
-        pub fn destroy(node: *Self, state: *model.State, owners: anytype) void {
-            _ = model.each(node, .all, model.destroyChild, .{ state, owners });
+        pub fn destroy(node: *Self, state: *model.State, components: anytype) void {
+            _ = model.each(node, .all, model.destroyChild, .{ state, components });
             if (comptime model.handles(@TypeOf(node.widget), .input)) state.inputs -= 1;
         }
 

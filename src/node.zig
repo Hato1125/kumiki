@@ -7,7 +7,7 @@ const list = @import("node/list.zig");
 pub const NodeId = model.NodeId;
 pub const State = model.State;
 pub const Host = model.Host;
-pub const Origin = model.Origin;
+pub const Source = model.Source;
 pub const Order = model.Order;
 pub const HandlerKind = model.HandlerKind;
 

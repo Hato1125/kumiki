@@ -237,7 +237,7 @@ pub fn keepsOffset(comptime View: type) bool {
     return @hasDecl(Config, "layout") or @hasDecl(Config, "layoutAll");
 }
 
-pub const Origin = enum { view, function };
+pub const Source = enum { written, returned };
 
 /// Where a node is: at its own offset, or where its last child is for a node
 /// that keeps none.
@@ -287,12 +287,12 @@ fn stops(result: anytype) bool {
     return @TypeOf(result) == bool and result;
 }
 
-pub fn destroyChild(node: anytype, state: *State, owners: anytype) void {
-    node.destroy(state, owners);
+pub fn destroyChild(node: anytype, state: *State, components: anytype) void {
+    node.destroy(state, components);
 }
 
-pub fn rebuildChild(node: anytype, state: *State, owners: anytype) void {
-    node.rebuild(state, owners);
+pub fn rebuildChild(node: anytype, state: *State, components: anytype) void {
+    node.rebuild(state, components);
 }
 
 pub fn markAllChild(node: anytype) void {
