@@ -11,22 +11,22 @@ const ReturnOf = @import("../node.zig").ReturnOf;
 /// kept, so switching back and forth keeps their state.
 pub fn Select(comptime cond_fn: anytype) type {
     const Choice = ReturnOf(cond_fn);
-    if (@typeInfo(Choice) != .@"enum" or !@typeInfo(Choice).@"enum".is_exhaustive) {
+    if (@typeInfo(Choice) != .@"enum" or @typeInfo(Choice).@"enum".mode != .exhaustive) {
         @compileError("select takes a function that returns an exhaustive enum, not " ++
             @typeName(Choice) ++ "; use `when` for a bool");
     }
-    const fields = @typeInfo(Choice).@"enum".fields;
+    const values = @typeInfo(Choice).@"enum".field_values;
 
     return struct {
-        active: Choice = @enumFromInt(fields[0].value),
+        active: Choice = @fromBackingInt(@intCast(values[0])),
 
         const Self = @This();
 
         pub const cond = cond_fn;
-        pub const count = fields.len;
+        pub const count = values.len;
 
         pub fn shows(s: Self, comptime child: usize) bool {
-            return s.active == @as(Choice, @enumFromInt(fields[child].value));
+            return s.active == @as(Choice, @fromBackingInt(@intCast(values[child])));
         }
 
         pub fn measureAll(s: Self, children: anytype, c: Constraint) Extent {

@@ -67,8 +67,8 @@ pub fn spawn(
 ) void {
     comptime {
         const Result = node_zig.ReturnOf(work);
-        const takes = for (@typeInfo(@TypeOf(done)).@"fn".params) |param| {
-            if (param.type == Result) break true;
+        const takes = for (@typeInfo(@TypeOf(done)).@"fn".param_types) |param_type| {
+            if (param_type == Result) break true;
         } else false;
         if (Result != void and !takes) {
             @compileError("the function given to spawn takes no " ++ @typeName(Result));

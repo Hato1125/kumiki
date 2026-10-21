@@ -33,25 +33,26 @@ fn WidgetOf(comptime Owner: type) type {
 /// share a value, such as a theme, without knowing who holds it.
 pub fn find(comptime Owners: type, comptime P: type) ?Source {
     const T = Pointee(P);
-    const owners = @typeInfo(Owners).@"struct".fields;
+    const owners = @typeInfo(Owners).@"struct".field_types;
     var i = owners.len;
     while (i > 0) {
         i -= 1;
-        if (WidgetOf(owners[i].type) == T) return .{ .owner = i };
+        if (WidgetOf(owners[i]) == T) return .{ .owner = i };
     }
 
     i = owners.len;
     while (i > 0) {
         i -= 1;
-        const Widget = WidgetOf(owners[i].type);
+        const Widget = WidgetOf(owners[i]);
+        const info = @typeInfo(Widget).@"struct";
         var found: ?[]const u8 = null;
-        for (@typeInfo(Widget).@"struct".fields) |field| {
-            if (field.type != T) continue;
+        for (info.field_names, info.field_types) |field_name, Field| {
+            if (Field != T) continue;
             if (found != null) {
                 @compileError(@typeName(Widget) ++
                     " has more than one field of type " ++ @typeName(T));
             }
-            found = field.name;
+            found = field_name;
         }
         const gives = node_zig.provides(Widget) and node_zig.Provided(Widget) == T;
         if (gives and found != null) {
@@ -102,12 +103,8 @@ fn isCallback(comptime P: type) bool {
 
 // The owners of the place where the innermost of `Owners` is written.
 fn Outer(comptime Owners: type) type {
-    const fields = @typeInfo(Owners).@"struct".fields;
-    var element_types: [fields.len - 1]type = undefined;
-    for (&element_types, fields[0 .. fields.len - 1]) |*element, field| {
-        element.* = field.type;
-    }
-    return @Tuple(&element_types);
+    const field_types = @typeInfo(Owners).@"struct".field_types;
+    return @Tuple(field_types[0 .. field_types.len - 1]);
 }
 
 fn bind(comptime P: type, owners: anytype, state: *const State) P {
@@ -161,7 +158,7 @@ fn argument(
     const from = comptime source(@TypeOf(owners.*), P);
     const pointer = comptime @typeInfo(P) == .pointer;
     if (comptime from.given) {
-        if (comptime pointer and !@typeInfo(P).pointer.is_const) {
+        if (comptime pointer and !@typeInfo(P).pointer.attrs.@"const") {
             @compileError("a " ++ @typeName(Pointee(P)) ++ " is provided, " ++
                 "so it is received by value or as a const pointer");
         }
@@ -187,8 +184,8 @@ pub fn invoke(
     event: anytype,
 ) ReturnOf(f) {
     var args: std.meta.ArgsTuple(@TypeOf(f)) = undefined;
-    inline for (@typeInfo(@TypeOf(f)).@"fn".params, 0..) |param, i| {
-        const P = param.type orelse
+    inline for (@typeInfo(@TypeOf(f)).@"fn".param_types, 0..) |param_type, i| {
+        const P = param_type orelse
             @compileError("parameters must have concrete types");
         args[i] = argument(P, &owners, state, event);
     }
