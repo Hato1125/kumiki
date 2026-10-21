@@ -145,7 +145,7 @@ pub const Window = struct {
 
     // SDL takes a NUL-terminated string.
     pub fn copy(_: *Window, text: []const u8) bool {
-        const terminated = std.heap.c_allocator.dupeZ(u8, text) catch @panic("out of memory");
+        const terminated = std.heap.c_allocator.dupeSentinel(u8, text, 0) catch @panic("out of memory");
         defer std.heap.c_allocator.free(terminated);
         return c.SDL_SetClipboardText(terminated);
     }
@@ -207,7 +207,7 @@ pub const Window = struct {
             c.SDL_EVENT_WINDOW_FOCUS_LOST => .{ .active = false },
             c.SDL_EVENT_WINDOW_EXPOSED, c.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => .redraw,
             c.SDL_EVENT_MOUSE_BUTTON_DOWN, c.SDL_EVENT_MOUSE_BUTTON_UP => .{ .button = .{
-                .button = @enumFromInt(event.button.button),
+                .button = @fromBackingInt(@intCast(event.button.button)),
                 .down = event.button.down,
                 .x = event.button.x,
                 .y = event.button.y,

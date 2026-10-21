@@ -148,10 +148,7 @@ pub fn leaf(config: anytype) Container(void, @TypeOf(config)) {
 /// literals with compile-time values get comptime fields, which would make
 /// two literals of the same shape different types.
 pub fn Runtime(comptime Tuple: type) type {
-    const fields = @typeInfo(Tuple).@"struct".fields;
-    var element_types: [fields.len]type = undefined;
-    for (fields, 0..) |field, i| element_types[i] = field.type;
-    return @Tuple(&element_types);
+    return @Tuple(@typeInfo(Tuple).@"struct".field_types);
 }
 
 /// A copy of `view` with one field changed.

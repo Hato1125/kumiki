@@ -24,8 +24,8 @@ fn isAnimated(comptime View: type) bool {
 // What the component `View` provides. `inner` are its owners and its own
 // node. The value cannot be made of the one it replaces.
 fn provided(comptime View: type, inner: anytype, state: *State) Provided(View) {
-    comptime for (@typeInfo(@TypeOf(View.provide)).@"fn".params) |param| {
-        if (call.Pointee(param.type.?) == Provided(View)) {
+    comptime for (@typeInfo(@TypeOf(View.provide)).@"fn".param_types) |param_type| {
+        if (call.Pointee(param_type.?) == Provided(View)) {
             @compileError("the provide of " ++ @typeName(View) ++
                 " receives the type it provides");
         }
@@ -260,9 +260,9 @@ pub fn markChanged(
 /// holding a field received as a mutable pointer. A pointer that no owner
 /// fills in is the event, such as the result of a background function.
 pub fn markTargets(comptime f: anytype, owners: anytype) void {
-    inline for (@typeInfo(@TypeOf(f)).@"fn".params) |param| {
-        const P = param.type.?;
-        if (comptime @typeInfo(P) == .pointer and !@typeInfo(P).pointer.is_const) {
+    inline for (@typeInfo(@TypeOf(f)).@"fn".param_types) |param_type| {
+        const P = param_type.?;
+        if (comptime @typeInfo(P) == .pointer and !@typeInfo(P).pointer.attrs.@"const") {
             if (comptime call.find(@TypeOf(owners), P)) |from| {
                 markAll(owners[from.owner]);
             }
