@@ -72,6 +72,8 @@ pub fn mount(
         node.widget = value;
         node.dirty = false;
         node.arena = .init;
+        node.constraint = .{};
+        node.read = null;
         const inner = owners ++ .{node};
         if (comptime @hasDecl(View, "mount")) {
             invoke(View.mount, inner, state, {});
@@ -190,6 +192,7 @@ pub fn rebuild(node: anytype, state: *State, owners: anytype) void {
             const last = node.arena.promote(state.gpa);
             node.arena = .init;
             node.dirty = false;
+            node.read = null;
             state.built = true;
 
             // A new value reaches the components inside only when they are
@@ -233,6 +236,20 @@ pub fn rebuild(node: anytype, state: *State, owners: anytype) void {
         }
     }
     _ = each(node, .all, rebuild, .{ state, owners });
+}
+
+/// Marks the components whose functions received a constraint other than
+/// the one they were measured with since, and sets `marked` if there are any.
+pub fn markResized(node: anytype, marked: *bool) void {
+    if (comptime isComponent(@TypeOf(node.widget))) {
+        if (node.read) |read| {
+            if (!std.meta.eql(read, node.constraint)) {
+                node.dirty = true;
+                marked.* = true;
+            }
+        }
+    }
+    _ = each(node, .all, markResized, .{marked});
 }
 
 pub fn markAll(node: anytype) void {
