@@ -33,10 +33,13 @@ fn measureLast(children: anytype, c: Constraint) Extent {
     return size;
 }
 
-/// Places `node`, which was measured before, and everything inside it.
-pub fn layout(node: anytype, at: Point) void {
+/// Places `node`, which was measured before, and everything inside it. A
+/// config that declares `place(config, at) Point` moves the node from `at` to
+/// where that returns.
+pub fn layout(node: anytype, given: Point) void {
     const Widget = @TypeOf(node.widget);
     const children = &node.children;
+    const at = if (comptime has(Widget, "place")) node.widget.place(given) else given;
     if (comptime @TypeOf(node.offset) != void) node.offset = at;
     if (comptime @TypeOf(children.*) == void) return;
     if (comptime has(Widget, "layoutAll")) {

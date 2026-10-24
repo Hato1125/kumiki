@@ -121,6 +121,7 @@ pub fn Container(comptime Children: type, comptime Config: type) type {
 
         pub const padding = mod.padding;
         pub const frame = mod.frame;
+        pub const offset = mod.offset;
         pub const flex = mod.flex;
         pub const bg = mod.bg;
         pub const clip = mod.clip;
@@ -183,6 +184,7 @@ fn Wrapped(comptime Self: type, comptime Config: type) type {
 
 /// Wraps the view in `config`, a struct that may declare any of
 /// `measure(config, child, constraint) Extent`,
+/// `place(config, position) Point`,
 /// `layout(config, child, position, size) void`,
 /// `beginPaint(config, painter) void` and `endPaint(config, painter) void`.
 /// Without them the view keeps the size and the position of its child.
@@ -277,6 +279,24 @@ const Frame = struct {
 
 pub fn frame(self: anytype, spec: Frame) Wrapped(@TypeOf(self), Frame) {
     return with(self, spec);
+}
+
+const Offset = struct {
+    x: f32,
+    y: f32,
+
+    pub fn place(o: Offset, at: Point) Point {
+        return .{
+            .x = at.x + o.x,
+            .y = at.y + o.y,
+        };
+    }
+};
+
+/// Moves the view by `x` and `y` from where it is placed, without changing
+/// where the views around it go. The pointer finds it where it is drawn.
+pub fn offset(self: anytype, x: f32, y: f32) Wrapped(@TypeOf(self), Offset) {
+    return with(self, Offset{ .x = x, .y = y });
 }
 
 const Flexed = struct { flex: f32 };
