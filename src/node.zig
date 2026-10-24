@@ -236,6 +236,8 @@ fn keepsOffset(comptime View: type) bool {
 /// The widget of a container is its config, because its children have nodes
 /// of their own. The arena holds the strings made by Context.print until the
 /// next build, and `given` what the component provided at its last build.
+/// `constraint` is what a component was last measured with, and `read` what
+/// its functions received of it at its last build, or null when none did.
 /// `offsetOf` reads the offset, which not every node keeps.
 pub fn Node(comptime View: type) type {
     return struct {
@@ -247,6 +249,8 @@ pub fn Node(comptime View: type) type {
         dirty: if (isComponent(View)) bool else void,
         arena: if (isComponent(View)) std.heap.ArenaAllocator.State else void,
         given: if (provides(View)) Provided(View) else void,
+        constraint: if (isComponent(View)) types.Constraint else void,
+        read: if (isComponent(View)) ?types.Constraint else void,
     };
 }
 

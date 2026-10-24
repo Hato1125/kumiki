@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Context = @import("cx.zig");
+const Constraint = @import("types.zig").Constraint;
 const node_zig = @import("node.zig");
 const ReturnOf = node_zig.ReturnOf;
 const State = node_zig.State;
@@ -72,7 +73,7 @@ pub fn source(comptime Owners: type, comptime P: type) Source {
 /// Whether a parameter of type `P` is filled in from the owners. One that is
 /// not stands for the event.
 pub fn fills(comptime Owners: type, comptime P: type) bool {
-    return P == Context or isCallback(P) or find(Owners, P) != null;
+    return P == Context or P == Constraint or isCallback(P) or find(Owners, P) != null;
 }
 
 /// A function that a component is given when it is written in a view, for the
@@ -146,6 +147,14 @@ fn argument(
             .size = node.size,
         };
     }
+    if (P == Constraint) {
+        if (owners.len == 0) {
+            @compileError("ui.Constraint is only available inside a component");
+        }
+        const node = owners.*[owners.len - 1];
+        node.read = node.constraint;
+        return node.constraint;
+    }
     if (P == @TypeOf(event)) return event;
     if (comptime isCallback(P)) return bind(P, owners, state);
 
@@ -167,8 +176,10 @@ fn argument(
 /// Calls `f`, filling each parameter by its type: a component type, or a
 /// pointer to one, receives the nearest enclosing component of that type, any
 /// other type receives what the nearest component that holds or provides one
-/// has of it, ui.Context receives the Context of the nearest component and
-/// the type of `event` receives the event being handled.
+/// has of it, ui.Context receives the Context of the nearest component,
+/// ui.Constraint what that component was last measured with, and the type of
+/// `event` receives the event being handled. A component whose functions
+/// receive ui.Constraint is built again when it is measured with another.
 pub fn invoke(
     comptime f: anytype,
     owners: anytype,

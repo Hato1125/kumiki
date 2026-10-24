@@ -12,6 +12,7 @@ const has = node_zig.has;
 pub fn measure(node: anytype, c: Constraint) Extent {
     const Widget = @TypeOf(node.widget);
     const children = &node.children;
+    if (comptime node_zig.isComponent(Widget)) node.constraint = c;
     node.size = if (comptime @TypeOf(children.*) == void)
         (if (comptime has(Widget, "measure")) node.widget.measure(c) else c.min)
     else if (comptime has(Widget, "measureAll"))

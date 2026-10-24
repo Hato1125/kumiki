@@ -243,18 +243,31 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             }
         }
 
-        // A path that went stale is found again, and dropped when its node
-        // is gone or no longer shown. The focus that was in a popup goes back
-        // to the view of the popup when that closes. A new layout may have moved something
-        // under a still pointer.
+        // A component whose functions received the constraint it is
+        // measured with is built and measured again in the same frame when
+        // that changes. The rounds are bounded, because a view whose
+        // constraint follows what it builds may never settle.
         fn update(s: *Self) void {
-            const state = &s.state;
             const size = s.impl.size();
             const scale: f32 = if (comptime @hasDecl(Impl, "scale")) s.impl.scale() else s.scale;
             // Before anything is built: an animation measures its view on
             // its own.
             if (comptime @hasDecl(Impl, "scale")) text_zig.setScale(scale);
             s.pending = false;
+            for (0..4) |_| {
+                if (!s.round(size, scale)) break;
+            }
+            if (s.state.inputs != 0 or s.typing != 0) s.retype();
+        }
+
+        // Builds and lays out the tree once, and returns whether a component
+        // was marked to be built again for a new constraint. A path that went
+        // stale is found again, and dropped when its node is gone or no
+        // longer shown. The focus that was in a popup goes back to the view
+        // of the popup when that closes. A new layout may have moved
+        // something under a still pointer.
+        fn round(s: *Self, size: Extent, scale: f32) bool {
+            const state = &s.state;
             state.animating = false;
             state.built = false;
             state.stale = false;
@@ -280,7 +293,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 s.wanted = 0;
                 if (walk.first != 0) s.move(&s.focus, s.pathTo(walk.first));
             }
-            if (state.built or !std.meta.eql(size, s.size) or scale != s.scale) {
+            const measured = state.built or !std.meta.eql(size, s.size) or scale != s.scale;
+            if (measured) {
                 s.changed = true;
                 s.size = size;
                 s.scale = scale;
@@ -289,7 +303,11 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 popup.place(&s.root, size);
                 if (s.pointer) |at| s.hoverAt(at);
             }
-            if (state.inputs != 0 or s.typing != 0) s.retype();
+            // A running animation measured its view while it was built.
+            if (!measured and !state.animating) return false;
+            var marked = false;
+            tree.markResized(&s.root, &marked);
+            return marked;
         }
 
         // Asks the implementation for typed text where the focus is on an
