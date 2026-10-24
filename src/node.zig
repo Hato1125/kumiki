@@ -225,12 +225,17 @@ pub fn Resolved(comptime View: type) type {
 
 // Whether a node of `View` keeps its position. One that leaves its children
 // where it is, as a component always does, is where its last child is and
-// keeps none.
+// keeps none. An animation keeps it, because it lays its view out again where
+// it was placed, which a `place` inside may have moved its child from.
 fn keepsOffset(comptime View: type) bool {
     if (isComponent(View)) return false;
     if (@FieldType(View, "children") == void) return true;
+
     const Config = @FieldType(View, "config");
-    return @hasDecl(Config, "layout") or @hasDecl(Config, "layoutAll");
+
+    return @hasDecl(Config, "layout") or
+        @hasDecl(Config, "layoutAll") or
+        @hasField(Config, "tween");
 }
 
 /// The widget of a container is its config, because its children have nodes
