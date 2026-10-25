@@ -283,9 +283,9 @@ pub const FocusWalk = struct {
 fn wrapsStop(comptime N: type) bool {
     const Children = @FieldType(N, "children");
     if (Children == void or @hasField(Children, "items")) return false;
-    const children = @typeInfo(Children).@"struct".fields;
+    const children = @typeInfo(Children).@"struct".field_types;
     if (children.len != 1) return false;
-    return isFocusable(@FieldType(children[0].type, "widget")) or wrapsStop(children[0].type);
+    return isFocusable(@FieldType(children[0], "widget")) or wrapsStop(children[0]);
 }
 
 pub fn walkFocus(node: anytype, walk: *FocusWalk) void {
@@ -528,8 +528,8 @@ pub fn watch(
 // that the owners do not fill in, or void without one.
 fn Handed(comptime f: anytype, comptime Owners: type) type {
     var handed: type = void;
-    for (@typeInfo(@TypeOf(f)).@"fn".params) |param| {
-        const P = param.type orelse @compileError("parameters must have concrete types");
+    for (@typeInfo(@TypeOf(f)).@"fn".param_types) |param_type| {
+        const P = param_type orelse @compileError("parameters must have concrete types");
         if (!call.fills(Owners, P)) handed = P;
     }
     return handed;

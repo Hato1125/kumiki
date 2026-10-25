@@ -145,8 +145,8 @@ pub fn same(comptime T: type, a: T, b: T) bool {
             return true;
         },
         .@"struct" => |s| {
-            inline for (s.fields) |f| {
-                if (!f.is_comptime and !same(f.type, @field(a, f.name), @field(b, f.name))) {
+            inline for (s.field_names, s.field_types, s.field_attrs) |name, F, attrs| {
+                if (!attrs.@"comptime" and !same(F, @field(a, name), @field(b, name))) {
                     return false;
                 }
             }
@@ -183,9 +183,9 @@ pub fn lerp(comptime T: type, a: T, b: T, t: f32) T {
         },
         .@"struct" => |s| {
             var r: T = b;
-            inline for (s.fields) |f| {
-                if (!f.is_comptime) {
-                    @field(r, f.name) = lerp(f.type, @field(a, f.name), @field(b, f.name), t);
+            inline for (s.field_names, s.field_types, s.field_attrs) |name, F, attrs| {
+                if (!attrs.@"comptime") {
+                    @field(r, name) = lerp(F, @field(a, name), @field(b, name), t);
                 }
             }
             return r;

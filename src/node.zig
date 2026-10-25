@@ -66,8 +66,8 @@ fn Depth(comptime N: type) type {
             }
 
             var deepest: usize = 0;
-            for (@typeInfo(Inside).@"struct".fields) |child| {
-                deepest = @max(deepest, Depth(child.type).of);
+            for (@typeInfo(Inside).@"struct".field_types) |Child| {
+                deepest = @max(deepest, Depth(Child).of);
             }
             break :inside deepest;
         };
@@ -191,8 +191,8 @@ fn Holding(comptime N: type, comptime matches: fn (comptime type) bool) type {
                 const Row = @typeInfo(@FieldType(Inside, "items")).pointer.child;
                 break :inside Holding(Row, matches).any;
             }
-            for (@typeInfo(Inside).@"struct".fields) |child| {
-                if (Holding(child.type, matches).any) break :inside true;
+            for (@typeInfo(Inside).@"struct".field_types) |Child| {
+                if (Holding(Child, matches).any) break :inside true;
             }
             break :inside false;
         };
@@ -278,9 +278,9 @@ fn Children(comptime View: type) type {
     if (isList(View)) return std.ArrayList(Node(@FieldType(View, "config").Row));
     const Inside = @FieldType(View, "children");
     if (Inside == void) return void;
-    const fields = @typeInfo(Inside).@"struct".fields;
-    var element_types: [fields.len]type = undefined;
-    for (fields, 0..) |field, i| element_types[i] = NodeOf(field.type);
+    const field_types = @typeInfo(Inside).@"struct".field_types;
+    var element_types: [field_types.len]type = undefined;
+    for (field_types, 0..) |Field, i| element_types[i] = NodeOf(Field);
     return @Tuple(&element_types);
 }
 
