@@ -41,6 +41,19 @@ pub const Painter = struct {
         });
     }
 
+    /// Fills the bounds with a material of the canvas, from what is drawn
+    /// under them so far.
+    pub fn material(p: Painter, corners: gfx.Corners, with: gfx.MaterialFill) void {
+        p.canvas.rect(.{
+            .x = p.bounds.x,
+            .y = p.bounds.y,
+            .width = p.bounds.w,
+            .height = p.bounds.h,
+            .material = with,
+            .corners = corners,
+        });
+    }
+
     /// The stroke is kept inside the bounds.
     pub fn stroke(p: Painter, corners: gfx.Corners, width: f32, color: gfx.Color) void {
         if (color.a == 0 or width <= 0) return;
