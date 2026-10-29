@@ -83,8 +83,9 @@ fn Depth(comptime N: type) type {
 /// background point at it while the scene may still be moved. `inputs` counts
 /// the nodes that take typed text, and `typing` is where the implementation
 /// was asked for it. `wanted` points at the component that asked for the
-/// focus, where the scene keeps it until the tree is built, and `closed` at
-/// whether a function asked to close the scene. `focus`, `hover` and `press`
+/// focus, where the scene keeps it until the tree is built, `closed` at
+/// whether a function asked to close the scene, and `vsync` and `limit` at
+/// how the scene draws. `focus`, `hover` and `press`
 /// are the paths that the scene keeps.
 pub const State = struct {
     gpa: std.mem.Allocator,
@@ -92,6 +93,8 @@ pub const State = struct {
     host: Host,
     wanted: *NodeId,
     closed: *bool,
+    vsync: *bool,
+    limit: *?f64,
     inputs: u32 = 0,
     typing: ?types.Bounds = null,
     active: bool = true,

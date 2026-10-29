@@ -31,7 +31,9 @@ const tree = @import("tree.zig");
 /// An implementation may declare `scale()`, how many pixels make up one unit
 /// of the sizes. It is read on every frame too: a text is as wide as the
 /// scale it is drawn at makes it, so the scene tells the scale before it
-/// measures, and lays everything out again when the scale changes.
+/// measures, and lays everything out again when the scale changes. It may
+/// also declare `vsync(on)`, which the scene calls when a function asks for
+/// another.
 ///
 /// The root may declare `pub fn closing`, which returns whether the scene
 /// closes when the implementation reports a close, and without which it
@@ -83,6 +85,16 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         closed: bool = false,
         /// When the last drawing asked for the next one.
         again: f64 = std.math.inf(f64),
+        /// How the scene draws, which a function may change through its
+        /// Context: `limit` is the most frames in a second.
+        vsync: bool = true,
+        limit: ?f64 = null,
+        /// The vsync the implementation was told last.
+        synced: ?bool = null,
+        /// When the last drawing was made, and whether one waits for the
+        /// next that `limit` allows.
+        drawn: f64 = -std.math.inf(f64),
+        owed: bool = false,
         /// Whether something was built or laid out since the last drawing.
         changed: bool = true,
 
@@ -107,6 +119,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                     .tasks = tasks,
                     .wanted = undefined,
                     .closed = undefined,
+                    .vsync = undefined,
+                    .limit = undefined,
                     .host = .{
                         .impl = undefined,
                         .paste = paste,
@@ -137,6 +151,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.state.host.impl = &s.impl;
             s.state.wanted = &s.wanted;
             s.state.closed = &s.closed;
+            s.state.vsync = &s.vsync;
+            s.state.limit = &s.limit;
             s.state.focus = s.focus.slice();
             s.state.hover = s.hover.slice();
             s.state.press = s.press.slice();
@@ -160,7 +176,7 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
 
         /// Whether the next frame is needed without waiting for input.
         pub fn busy(s: *const Self) bool {
-            return s.pending or s.state.animating or s.strays();
+            return s.pending or s.state.animating or s.owed or s.strays();
         }
 
         // Whether a view holds the pointer outside its bounds.
@@ -179,8 +195,8 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
         pub fn frame(s: *Self) !bool {
             s.settle();
             s.state.tasks.waker.store(&s.impl, .release);
-            const due = @min(s.again, s.state.tasks.due());
-            var wait = if (s.busy()) 0 else due - s.impl.now();
+            const due = @min(s.again, s.state.tasks.due(), s.ready());
+            var wait = if (s.pending or s.strays()) 0 else @max(0, due - s.impl.now());
             // The frame after an animation ended shows where it ended.
             const moving = s.state.animating;
             var seen = false;
@@ -210,9 +226,28 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
             s.update();
             if (s.closed) return false;
 
-            const still = seen and !redraw and !s.changed and !moving and !s.state.animating;
+            const still = seen and
+                !redraw and
+                !s.changed and
+                !moving and
+                !s.state.animating and
+                !s.owed;
             if (still and s.state.now < s.again) return true;
+
+            if (s.state.now < s.slot()) {
+                s.owed = true;
+                return true;
+            }
+
             s.again = std.math.inf(f64);
+            s.owed = false;
+            s.drawn = s.state.now;
+            if (comptime @hasDecl(Impl, "vsync")) {
+                if (s.synced != s.vsync) {
+                    s.impl.vsync(s.vsync);
+                    s.synced = s.vsync;
+                }
+            }
             if (try s.impl.begin()) |canvas| {
                 s.changed = false;
                 var target: painter.Target = .{
@@ -226,6 +261,20 @@ pub fn Scene(comptime Impl: type, comptime Root: type) type {
                 try s.impl.end();
             }
             return true;
+        }
+
+        // The earliest time `limit` allows the next drawing at.
+        fn slot(s: *const Self) f64 {
+            const max = s.limit orelse return -std.math.inf(f64);
+            return s.drawn + 1 / max;
+        }
+
+        // When the scene has to wake for a drawing that changes on its own,
+        // or one that waits for its slot. Input is taken at once, and only
+        // its drawing waits.
+        fn ready(s: *const Self) f64 {
+            if (s.state.animating or s.owed) return s.slot();
+            return std.math.inf(f64);
         }
 
         // Hands over what the background functions that have ended returned,

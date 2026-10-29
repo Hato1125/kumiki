@@ -169,6 +169,11 @@ pub const Window = struct {
         return @as(f64, @floatFromInt(c.SDL_GetTicksNS())) / std.time.ns_per_s;
     }
 
+    pub fn vsync(w: *Window, on: bool) void {
+        _ = c.SDL_GL_MakeCurrent(w.window, w.gl);
+        _ = c.SDL_GL_SetSwapInterval(if (on) 1 else 0);
+    }
+
     /// A minimized window has nothing to draw to.
     pub fn begin(w: *Window) !?*gfx.Canvas {
         _ = c.SDL_GL_MakeCurrent(w.window, w.gl);
