@@ -62,6 +62,9 @@ pub const Painter = @import("paint.zig").Painter;
 pub const Canvas = gfx.Canvas;
 pub const Layer = gfx.Layer;
 pub const Corners = gfx.Corners;
+pub const Material = gfx.Material;
+pub const MaterialSource = gfx.MaterialSource;
+pub const MaterialFill = gfx.MaterialFill;
 pub const Insets = mod.Insets;
 
 pub const Text = mod.Container(void, @import("view/text.zig").Text);
