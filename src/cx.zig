@@ -45,6 +45,19 @@ pub fn close(cx: Context) void {
     cx.state.closed.* = true;
 }
 
+/// Makes the scene wait for the display to show each frame, from the next
+/// frame on. It does from the start.
+pub fn vsync(cx: Context, on: bool) void {
+    cx.state.vsync.* = on;
+}
+
+/// Makes the scene draw at most `max` frames in a second, which is
+/// positive, from the next frame on. Null, as at the start, sets no limit.
+pub fn limit(cx: Context, max: ?f64) void {
+    std.debug.assert(max orelse 1 > 0);
+    cx.state.limit.* = max;
+}
+
 pub fn hovered(cx: Context) bool {
     return contains(cx.state.hover, cx.id);
 }
