@@ -29,8 +29,9 @@ fn WidgetOf(comptime Owner: type) type {
 /// `Owners` holds pointers to the nodes of the enclosing components, the
 /// outermost first. The nearest component of type `P`, or pointed to by `P`,
 /// wins. When there is none, the value comes from the nearest component that
-/// has a field of that type or provides that type, which lets components
-/// share a value, such as a theme, without knowing who holds it.
+/// shares a field of that type with `pub const shares = .field_name` or
+/// provides that type, which lets components share a value, such as a theme,
+/// without knowing who holds it.
 pub fn find(comptime Owners: type, comptime P: type) ?Source {
     const T = Pointee(P);
     const owners = @typeInfo(Owners).@"struct".field_types;
@@ -44,30 +45,29 @@ pub fn find(comptime Owners: type, comptime P: type) ?Source {
     while (i > 0) {
         i -= 1;
         const Widget = WidgetOf(owners[i]);
-        const info = @typeInfo(Widget).@"struct";
-        var found: ?[]const u8 = null;
-        for (info.field_names, info.field_types) |field_name, Field| {
-            if (Field != T) continue;
-            if (found != null) {
-                @compileError(@typeName(Widget) ++
-                    " has more than one field of type " ++ @typeName(T));
+        if (@hasDecl(Widget, "shares")) {
+            const name = @tagName(Widget.shares);
+
+            if (@FieldType(Widget, name) == T) {
+                return .{
+                    .owner = i,
+                    .field = name,
+                };
             }
-            found = field_name;
         }
-        const gives = node_zig.provides(Widget) and node_zig.Provided(Widget) == T;
-        if (gives and found != null) {
-            @compileError(@typeName(Widget) ++
-                " both holds and provides a " ++ @typeName(T));
+        if (node_zig.provides(Widget) and node_zig.Provided(Widget) == T) {
+            return .{
+                .owner = i,
+                .given = true,
+            };
         }
-        if (found) |name| return .{ .owner = i, .field = name };
-        if (gives) return .{ .owner = i, .given = true };
     }
     return null;
 }
 
 pub fn source(comptime Owners: type, comptime P: type) Source {
     return find(Owners, P) orelse
-        @compileError("no enclosing component is, holds or provides a " ++
+        @compileError("no enclosing component is, shares or provides a " ++
             @typeName(Pointee(P)) ++ " for this parameter");
 }
 
@@ -172,7 +172,7 @@ fn argument(
 
 /// Calls `f`, filling each parameter by its type: a component type, or a
 /// pointer to one, receives the nearest enclosing component of that type, any
-/// other type receives what the nearest component that holds or provides one
+/// other type receives what the nearest component that shares or provides one
 /// has of it, ui.Context receives the Context of the nearest component,
 /// ui.Constraint what that component was last measured with, and the type of
 /// `event` receives the event being handled. A component whose functions

@@ -274,7 +274,7 @@ pub fn markChanged(
 
 /// A component received as a mutable pointer may have been changed, so it and
 /// everything inside it are built again. The same goes for the component
-/// holding a field received as a mutable pointer. A pointer that no owner
+/// sharing a field received as a mutable pointer. A pointer that no owner
 /// fills in is the event, such as the result of a background function.
 pub fn markTargets(comptime f: anytype, owners: anytype) void {
     inline for (@typeInfo(@TypeOf(f)).@"fn".param_types) |param_type| {
